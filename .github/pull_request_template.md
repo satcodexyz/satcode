@@ -1,8 +1,6 @@
 ## Summary
-<!-- What does this PR change? -->
 
 ## Related issue
-<!-- Link the issue, if applicable -->
 
 ## Changes made
 - 
