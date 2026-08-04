@@ -2,6 +2,8 @@
 
 ## Related issue
 
+Closes #
+
 ## Changes made
 - 
 
