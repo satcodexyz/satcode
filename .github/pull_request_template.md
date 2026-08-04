@@ -6,8 +6,6 @@
 
 ## Changes made
 - 
-- 
-- 
 
 ## Testing / checks
 - [ ] Checks passed
