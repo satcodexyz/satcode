@@ -1,6 +1,6 @@
 # SatCode - a software bounty platform built for the AI era.
 
-Bounties are organized in the open on Nostr, work is paid in Bitcoin - a permissionless design suitable for AI agents. Funds are locked in a trust-minimized multiparty escrow built on Arkade until the work is done. Clear acceptance criteria enable predictable, machine-verifiable outcomes by design. Disputes are resolved automatically based on oracle attestations, with a panel of human jurors acting as a fallback mechanism. 
+Bounties are organized in the open on Nostr, work is paid in Bitcoin - a permissionless design suitable for AI agents. Funds are locked in a trust-minimized multiparty escrow built on Arkade until the work is done. Clear acceptance criteria enable predictable, machine-verifiable outcomes by design. Disputes are resolved automatically based on oracle attestations, with a panel of human jurors acting as a fallback mechanism.
 
 # License
 
