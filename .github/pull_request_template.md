@@ -11,10 +11,10 @@ Closes #
 ## Author checklist
 
 - [ ] Matches the spec
-- [ ] Checks passed
-- [ ] `bun run format` run
-- [ ] `bun run lint` shows no errors
-- [ ] `bun run build` succeeds
+- [ ] `bun run test` - all tests pass
+- [ ] `bun run format` - code has been formatted
+- [ ] `bun run lint` - no eslint errors
+- [ ] `bun run build` - build succeeds
 - [ ] I tested the relevant changes manually
 
 ## Reviewer checklist
