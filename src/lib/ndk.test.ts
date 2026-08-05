@@ -7,7 +7,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 
 vi.mock('@nostr-dev-kit/ndk', () => {
-  const MockNDK = vi.fn(function (this: Record<string, unknown>, opts: unknown) {
+  const MockNDK = vi.fn(function (
+    this: Record<string, unknown>,
+    opts: unknown
+  ) {
     this.connect = vi.fn();
     this.relayAuthDefaultPolicy = undefined;
     this._opts = opts;
