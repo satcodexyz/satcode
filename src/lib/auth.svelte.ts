@@ -1,4 +1,8 @@
-import { NDKNip07Signer, type NDKUser, type NDKUserProfile } from '@nostr-dev-kit/ndk';
+import {
+  NDKNip07Signer,
+  type NDKUser,
+  type NDKUserProfile
+} from '@nostr-dev-kit/ndk';
 import { ndk } from './ndk';
 
 // ---------------------------------------------------------------------------

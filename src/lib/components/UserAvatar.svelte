@@ -11,16 +11,19 @@
 
   let { profile, user, size = 'md' }: Props = $props();
 
-  const sizeClasses: Record<NonNullable<Props['size']>, { wrap: string; text: string }> = {
-    sm: { wrap: 'h-6 w-6 text-xs',  text: 'text-xs'  },
-    md: { wrap: 'h-8 w-8 text-sm',  text: 'text-sm'  },
+  const sizeClasses: Record<
+    NonNullable<Props['size']>,
+    { wrap: string; text: string }
+  > = {
+    sm: { wrap: 'h-6 w-6 text-xs', text: 'text-xs' },
+    md: { wrap: 'h-8 w-8 text-sm', text: 'text-sm' },
     lg: { wrap: 'h-10 w-10 text-base', text: 'text-base' }
   };
 
   const displayName = $derived(resolveDisplayName(profile, user));
-  const avatarSrc   = $derived(profile?.picture ?? profile?.image ?? null);
-  const initial     = $derived(displayName.charAt(0).toUpperCase());
-  const classes     = $derived(sizeClasses[size]);
+  const avatarSrc = $derived(profile?.picture ?? profile?.image ?? null);
+  const initial = $derived(displayName.charAt(0).toUpperCase());
+  const classes = $derived(sizeClasses[size]);
 </script>
 
 <div class="flex items-center gap-2">
