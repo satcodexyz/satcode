@@ -1,3 +1,24 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@theme {
+  --color-bitcoin-50: #fff7ed;
+  --color-bitcoin-100: #ffedd5;
+  --color-bitcoin-200: #fed7aa;
+  --color-bitcoin-300: #fdba74;
+  --color-bitcoin-400: #fb923c;
+  --color-bitcoin-500: #f7931a; /* canonical Bitcoin orange */
+  --color-bitcoin-600: #ea7c0a;
+  --color-bitcoin-700: #c2620a;
+  --color-bitcoin-800: #9a4e0f;
+  --color-bitcoin-900: #7c3f10;
+  --color-bitcoin-950: #431f06;
+  --color-surface-300: #444444;
+  --color-surface-400: #333333;
+  --color-surface-500: #2a2a2a;
+  --color-surface-600: #222222;
+  --color-surface-700: #1a1a1a;
+  --color-surface-800: #111111;
+  --color-surface-900: #0a0a0a;
+}
