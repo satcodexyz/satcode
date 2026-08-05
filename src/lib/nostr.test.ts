@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { NDKEvent, NDKFilter, NDKSubscriptionOptions } from '@nostr-dev-kit/ndk';
+import type {
+  NDKEvent,
+  NDKFilter,
+  NDKSubscriptionOptions
+} from '@nostr-dev-kit/ndk';
 
 // ---------------------------------------------------------------------------
 // Mock the ndk singleton so no real WebSocket connections are made.
