@@ -17,6 +17,6 @@ Closes #
 - [ ] `bun run build` - build succeeds
 - [ ] I tested the relevant changes manually
 
-## Reviewer checklist
+## Reviewer manual testing checklist
 
 - [ ]
