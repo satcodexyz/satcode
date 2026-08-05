@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from '$app/paths';
   import { authState, login, logout } from '$lib/auth.svelte';
   import UserAvatar from './UserAvatar.svelte';
   import Loading from './Loading.svelte';
@@ -10,7 +11,10 @@
 >
   <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
     <!-- Brand -->
-    <a href="/" class="flex items-center gap-2 text-lg font-bold text-gray-100">
+    <a
+      href={resolve('/')}
+      class="flex items-center gap-2 text-lg font-bold text-gray-100"
+    >
       <span class="text-bitcoin-500">₿</span>SatCode
     </a>
 

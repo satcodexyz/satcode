@@ -116,7 +116,7 @@ export async function login(): Promise<void> {
  * Failures are silent — the user just stays logged out.
  */
 export async function restoreSession(): Promise<void> {
-  let storedMethod: string | null = null;
+  let storedMethod: string | null;
   try {
     storedMethod = localStorage.getItem(STORAGE_KEY);
   } catch {
