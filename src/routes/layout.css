@@ -14,6 +14,7 @@
   --color-bitcoin-800: #9a4e0f;
   --color-bitcoin-900: #7c3f10;
   --color-bitcoin-950: #431f06;
+  
   --color-surface-300: #444444;
   --color-surface-400: #333333;
   --color-surface-500: #2a2a2a;
@@ -21,4 +22,6 @@
   --color-surface-700: #1a1a1a;
   --color-surface-800: #111111;
   --color-surface-900: #0a0a0a;
+
+  --color-nostr-purple: #8e30eb;
 }
