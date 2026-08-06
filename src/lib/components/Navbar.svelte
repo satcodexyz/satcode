@@ -3,7 +3,22 @@
   import { authState, login, logout } from '$lib/auth.svelte';
   import UserAvatar from './UserAvatar.svelte';
   import Loading from './Loading.svelte';
+  import NostrSignerModal from './NostrSignerModal.svelte';
   import nostrLogo from '$lib/assets/nostr_logo_wht.png';
+
+  let modalOpen = $state(false);
+
+  /**
+   * If a NIP-07 extension is already present, log in immediately without
+   * opening the modal. Otherwise show the modal so the user can install one.
+   */
+  async function handleLoginClick() {
+    if (typeof window !== 'undefined' && window.nostr) {
+      await login();
+    } else {
+      modalOpen = true;
+    }
+  }
 </script>
 
 <header
@@ -44,7 +59,7 @@
           >
         {/if}
         <button
-          onclick={login}
+          onclick={handleLoginClick}
           class="flex items-center gap-2 rounded-md bg-nostr-purple px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500"
         >
           <img src={nostrLogo} alt="Nostr" class="h-4 w-4" />
@@ -54,3 +69,5 @@
     </div>
   </nav>
 </header>
+
+<NostrSignerModal open={modalOpen} onClose={() => (modalOpen = false)} />
