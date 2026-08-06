@@ -80,12 +80,11 @@ export async function login(): Promise<void> {
   authState.error = null;
 
   try {
-    const signer = new NDKNip07Signer();
     const ndkInstance = ndk();
+    const signer = new NDKNip07Signer(1000, ndkInstance);
     ndkInstance.signer = signer;
 
-    const user = await signer.blockUntilReady();
-    user.ndk = ndkInstance;
+    const user = await signer.user();   // reuses the promise the setter already kicked off
     authState.user = user;
 
     const profile = await user.fetchProfile();
