@@ -38,7 +38,9 @@ export default defineConfig(
     // 'svelte/button-has-type': 'error'
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
-      'no-nested-ternary': 'error'
+      'no-nested-ternary': 'error',
+      // resolve() cannot be used with external URLs, so this rule is not applicable
+      'svelte/no-navigation-without-resolve': 'off'
     }
   }
 );
