@@ -43,11 +43,13 @@
 
     <!-- Modal panel — sits on top of the backdrop -->
     <div
+      bind:this={panelEl}
       class="modal-panel relative z-10 p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelId}
       tabindex="-1"
+      onkeydown={handleKeydown}
     >
       {@render children()}
     </div>
