@@ -12,6 +12,13 @@
 
   let { open, onClose, children, labelId }: Props = $props();
 
+  let panelEl: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (open && panelEl) {
+      panelEl.focus();
+    }
+  });
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onClose();
   }
