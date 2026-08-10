@@ -25,13 +25,21 @@
   class="sticky top-0 z-50 border-b border-surface-600 bg-surface-800/90 backdrop-blur"
 >
   <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-    <!-- Brand -->
-    <a
-      href={resolve('/')}
-      class="flex items-center gap-2 text-lg font-bold text-gray-100"
-    >
-      <span class="text-bitcoin-500">₿</span>SatCode
-    </a>
+    <!-- Brand + primary nav -->
+    <div class="flex items-center gap-5">
+      <a
+        href={resolve('/')}
+        class="flex items-center gap-2 text-lg font-bold text-gray-100"
+      >
+        <span class="text-bitcoin-500">₿</span>SatCode
+      </a>
+      <a
+        href={resolve('/bounties/new')}
+        class="text-sm font-medium text-gray-400 transition-colors hover:text-gray-200"
+      >
+        New bounty
+      </a>
+    </div>
 
     <!-- Auth area -->
     <div class="flex items-center gap-3">
