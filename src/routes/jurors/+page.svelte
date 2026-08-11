@@ -1,5 +1,6 @@
 <script lang="ts">
   import JurorCard from '$lib/components/JurorCard.svelte';
+  import Modal from '$lib/components/Modal.svelte';
   import { authState } from '$lib/auth.svelte';
   import { formatSats } from '$lib/format';
   import type { Juror } from '$lib/types/juror';
@@ -84,18 +85,15 @@
   const totalBondedSats = $derived(
     activeJurors.reduce((sum, j) => sum + j.bondAmountSats, 0)
   );
-  const avgBondSats = $derived(
-    activeJurors.length > 0
-      ? Math.round(totalBondedSats / activeJurors.length)
-      : 0
-  );
+
+  // Modal state
+  let showModal = $state(false);
 
   // Join form state
   const MIN_BOND = 100_000;
   let bondAmountSats = $state<number | null>(null);
   let signingPubkey = $state('');
   let specialisationsInput = $state('');
-  let availability = $state<'active' | 'inactive'>('active');
 
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
@@ -114,6 +112,7 @@
 
   function handleSubmit(e: SubmitEvent) {
     e.preventDefault(); // publishing to Nostr (kind:30060) wired up in a later task
+    showModal = false;
   }
 </script>
 
@@ -149,10 +148,10 @@
     </div>
     <div class="bg-surface-800 px-5 py-4">
       <p class="text-xs font-medium tracking-wide text-gray-500 uppercase">
-        Avg. bond
+        Min. bond
       </p>
       <p class="mt-1 text-2xl font-bold text-gray-100">
-        {formatSats(avgBondSats)}
+        {formatSats(MIN_BOND)}
       </p>
     </div>
   </div>
@@ -166,12 +165,16 @@
 
   <!-- Section 2: Join the registry -->
   <div class="mt-14 border-t border-surface-600 pt-10">
-    <h2 class="text-xl font-bold text-gray-100">Become a Juror</h2>
-    <p class="mt-1 text-sm text-gray-400">
-      Stake a bond of at least {formatSats(MIN_BOND)} to register as juror. You'll
-      earn sats on every dispute you help resolve. Voting without reasoning, or missing
-      a vote, may result in a partial bond slash.
-    </p>
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-bold text-gray-100">Become a Juror</h2>
+        <p class="mt-1 text-sm text-gray-400">
+          Stake a bond of at least {formatSats(MIN_BOND)} to register as juror. You'll
+          earn sats on every dispute you help resolve. Voting without reasoning, or
+          missing a vote, may result in a partial bond slash.
+        </p>
+      </div>
+    </div>
 
     <!-- Info callout -->
     <div
@@ -184,15 +187,54 @@
           bond script.
         </li>
         <li>
-          Fill in the form below and submit your registration to Nostr
-          (kind:30060).
+          Click <strong class="text-gray-300">Become a juror</strong> and submit your
+          registration to Nostr (kind:30060).
         </li>
         <li>You'll be eligible for random selection onto dispute panels.</li>
         <li>Bonds must be refreshed every 30 days to maintain eligibility.</li>
       </ul>
     </div>
+    <button
+      onclick={() => (showModal = true)}
+      class="shrink-0 mt-4 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500"
+    >
+      Become a juror
+    </button>
+  </div>
+</main>
 
-    <form class="mt-8 max-w-2xl space-y-5" onsubmit={handleSubmit}>
+<Modal
+  open={showModal}
+  onClose={() => (showModal = false)}
+  labelId="juror-modal-title"
+>
+  <div class="w-full max-w-lg">
+    <div class="mb-6 flex items-center justify-between gap-4">
+      <h2 id="juror-modal-title" class="text-xl font-bold text-gray-100">
+        Become a Juror
+      </h2>
+      <button
+        onclick={() => (showModal = false)}
+        aria-label="Close"
+        class="rounded-md p-1 text-gray-400 transition-colors hover:bg-surface-600 hover:text-gray-200"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </button>
+    </div>
+
+    <form class="space-y-5" onsubmit={handleSubmit}>
       <label class="block">
         <span class="text-sm font-medium text-gray-300">Bond amount (sats)</span
         >
@@ -200,7 +242,7 @@
           type="number"
           bind:value={bondAmountSats}
           min={MIN_BOND}
-          step="1"
+          step="1000"
           required
           placeholder={String(MIN_BOND)}
           class={inputClasses}
@@ -244,34 +286,6 @@
         </span>
       </label>
 
-      <fieldset>
-        <legend class="text-sm font-medium text-gray-300">Availability</legend>
-        <div class="mt-2 flex gap-6">
-          <label class="flex cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              bind:group={availability}
-              value="active"
-              class="border-surface-500 bg-surface-700 text-bitcoin-500 focus:ring-bitcoin-500"
-            />
-            <span class="text-sm text-gray-300">Active</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              bind:group={availability}
-              value="inactive"
-              class="border-surface-500 bg-surface-700 text-bitcoin-500 focus:ring-bitcoin-500"
-            />
-            <span class="text-sm text-gray-300">Inactive</span>
-          </label>
-        </div>
-        <span class="mt-1 block text-xs text-gray-500">
-          Set to inactive to temporarily pause panel selection without
-          deregistering.
-        </span>
-      </fieldset>
-
       <div>
         {#if !isLoggedIn}
           <p class="mb-3 text-xs text-gray-400">
@@ -291,4 +305,4 @@
       </div>
     </form>
   </div>
-</main>
+</Modal>
