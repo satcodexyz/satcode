@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { resolve } from '$app/paths';
   import { formatSats } from '$lib/format';
   import {
     getBounty,
@@ -59,7 +58,7 @@
   <div class="py-20 text-center text-gray-500">
     <p class="text-lg font-medium">Bounty not found</p>
     <a
-      href={resolve('/')}
+      href="/"
       class="mt-3 inline-block text-sm text-bitcoin-400 hover:text-bitcoin-300"
       >← Back to bounties</a
     >
@@ -69,7 +68,7 @@
   <div class="mx-auto max-w-3xl px-4 py-8">
     <!-- Back link -->
     <a
-      href={resolve('/')}
+      href="/"
       class="mb-6 inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200"
     >
       <svg

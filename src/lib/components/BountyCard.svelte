@@ -1,6 +1,5 @@
 <script lang="ts">
   import { formatSats } from '$lib/format';
-  import { resolve } from '$app/paths';
   import type { Bounty, BountyStatus } from '$lib/types/bounty';
 
   interface Props {
@@ -35,7 +34,7 @@
 </script>
 
 <a
-  href={resolve(`/bounties/${bounty.id}`)}
+  href={`/bounties/${bounty.id}`}
   class="rounded-xl border border-surface-600 bg-surface-800 p-5 transition-colors hover:border-bitcoin-500/60"
 >
   <article>
