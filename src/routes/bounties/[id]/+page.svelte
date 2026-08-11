@@ -218,10 +218,8 @@
           </button>
           {#if !isLoggedIn}
             <p class="mt-3 text-sm text-gray-400">
-              <a
-                href={resolve('/')}
-                class="text-bitcoin-400 hover:text-bitcoin-300"
-                >Login with Nostr</a
+              <span style="cursor: not-allowed; text-gray-500"
+                >Login with Nostr</span
               >
               to accept this bounty.
             </p>
@@ -334,14 +332,18 @@
             </div>
           </div>
         {:else}
-          <p class="text-sm text-gray-500">
-            <a
-              href={resolve('/')}
-              class="text-bitcoin-400 hover:text-bitcoin-300"
-              >Login with Nostr</a
-            >
-            to join the discussion.
-          </p>
+          {#if bounty.status === 'claimed'}
+            <p class="text-sm text-gray-500">
+              Bounty is claimed and the discussion has been closed.
+            </p>
+          {:else}
+            <p class="text-sm text-gray-500">
+              <span style="cursor: not-allowed; text-gray-500"
+                >Login with Nostr</span
+              >
+              to join the discussion.
+            </p>
+          {/if}
         {/if}
       </div>
     </section>
