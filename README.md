@@ -37,6 +37,14 @@ bun run test    # unit tests
 bun run build   # production build
 ```
 
+Or run them all in one go:
+
+```sh
+bun run pr
+```
+
+CI runs the same checks (all except `format`) on every pull request.
+
 ## License
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.
