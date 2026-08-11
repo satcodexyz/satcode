@@ -1,10 +1,17 @@
 ## Summary
+
 ## Related issue
+
 Closes #
 
 ## Changes made
-- 
+
+-
+
 ## Author checklist
+
+`bun run pr` runs all the commands below in one go.
+
 - [ ] Matches the spec
 - [ ] `bun run format` - code has been formatted
 - [ ] `bun run lint` - no prettier/eslint errors
@@ -14,4 +21,5 @@ Closes #
 - [ ] I tested the relevant changes manually
 
 ## Reviewer manual testing checklist
-- [ ] 
+
+- [ ]
