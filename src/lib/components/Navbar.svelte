@@ -39,6 +39,12 @@
       >
         New bounty
       </a>
+      <a
+        href={resolve('/jurors')}
+        class="text-sm font-medium text-gray-400 transition-colors hover:text-gray-200"
+      >
+        Jurors
+      </a>
     </div>
 
     <!-- Auth area -->
