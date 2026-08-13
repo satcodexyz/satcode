@@ -103,12 +103,26 @@
   let showModal = $state(false);
   let specialisationsInput = $state('');
   let bondAmountInput = $state<number>(MIN_JUROR_BOND_SATS);
-  let mnemonicConfirmed = $state(false);
   let publishing = $state(false);
   let publishError = $state<string | null>(null);
 
+  // Seed backup / verification state
+  let showVerification = $state(false);
+  let verificationInputs = $state<string[]>(Array(12).fill(''));
+
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
+  );
+
+  // The 12 seed words split into an array for the numbered grid and verification
+  const seedWords = $derived(
+    arkWalletState.mnemonic ? arkWalletState.mnemonic.split(' ') : []
+  );
+
+  // Verification passes only when every typed word matches the original exactly
+  const verificationPassed = $derived(
+    seedWords.length === 12 &&
+      verificationInputs.every((w, i) => w.trim() === seedWords[i])
   );
 
   // Which progress pill is active (1-based, 4 steps total)
@@ -140,16 +154,31 @@
   // ---------------------------------------------------------------------------
 
   async function openModal() {
+    // Defence-in-depth: the button is already disabled when not logged in,
+    // but guard here too so keyboard / programmatic callers can't bypass it.
+    if (!isLoggedIn) return;
+
     showModal = true;
-    mnemonicConfirmed = false;
+    showVerification = false;
+    verificationInputs = Array(12).fill('');
     publishError = null;
     if (arkWalletState.step === 'uninitialised') {
       await initWallet();
     }
   }
 
+  /**
+   * First click on "I've backed up my phrase →" moves to the verification
+   * screen. Once the user has correctly typed all 12 words and clicks
+   * "Verify & Continue →", we call confirmBackup() to advance the wallet.
+   */
   async function handleConfirmBackup() {
-    await confirmBackup();
+    if (!showVerification) {
+      showVerification = true;
+      verificationInputs = Array(12).fill('');
+    } else if (verificationPassed) {
+      await confirmBackup();
+    }
   }
 
   async function handleRefreshBalance() {
@@ -281,10 +310,15 @@
     </div>
     <button
       onclick={openModal}
-      class="mt-4 shrink-0 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500"
+      disabled={!isLoggedIn}
+      title={isLoggedIn ? undefined : 'Login with Nostr to become a juror'}
+      class="mt-4 shrink-0 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500 disabled:cursor-not-allowed disabled:opacity-50"
     >
       Become a juror
     </button>
+    {#if !isLoggedIn}
+      <p class="mt-2 text-xs text-gray-500">Log in to become a juror</p>
+    {/if}
   </div>
 </main>
 
@@ -375,43 +409,104 @@
 
       <!-- STEP 1 — Mnemonic backup -->
     {:else if arkWalletState.step === 'needs-backup'}
-      <div class="space-y-4">
-        <p class="text-sm text-gray-300">
-          A fresh Arkade wallet has been generated.
-          <strong class="text-gray-100">Write down these 12 words</strong> — they
-          are the only way to recover your funds.
-        </p>
-        <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
-          <p
-            class="font-mono text-sm leading-relaxed tracking-wide text-bitcoin-300 select-all"
-          >
-            {arkWalletState.mnemonic}
+      {#if !showVerification}
+        <!-- 1a: Display the numbered seed phrase -->
+        <div class="space-y-4">
+          <p class="text-sm text-gray-300">
+            A fresh Arkade wallet has been generated.
+            <strong class="text-gray-100">Write down these 12 words</strong> in order
+            — they are the only way to recover your funds.
           </p>
-        </div>
-        <p class="text-xs text-gray-500">
-          The mnemonic is stored in your browser's localStorage. Once you
-          confirm, it is cleared from memory.
-        </p>
-        <label class="flex cursor-pointer items-start gap-3">
-          <input
-            type="checkbox"
-            bind:checked={mnemonicConfirmed}
-            class="mt-0.5 h-4 w-4 rounded border-surface-500 bg-surface-700 text-bitcoin-500 focus:ring-bitcoin-500"
-          />
-          <span class="text-sm text-gray-300"
-            >I have written down my recovery phrase and stored it safely.</span
+          <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
+            <div class="grid grid-cols-3 gap-2">
+              {#each seedWords as word, i}
+                <div
+                  class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5"
+                >
+                  <span
+                    class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
+                    >{i + 1}.</span
+                  >
+                  <span class="font-mono text-sm text-bitcoin-300 select-all"
+                    >{word}</span
+                  >
+                </div>
+              {/each}
+            </div>
+          </div>
+          <p class="text-xs text-gray-500">
+            The recovery phrase is stored in your browser's localStorage. Once
+            you verify it, it will be cleared from memory.
+          </p>
+          <button
+            onclick={handleConfirmBackup}
+            class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600"
           >
-        </label>
-        <button
-          onclick={handleConfirmBackup}
-          disabled={!mnemonicConfirmed || arkWalletState.loading}
-          class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {arkWalletState.loading
-            ? 'Building wallet…'
-            : "I've backed up my phrase →"}
-        </button>
-      </div>
+            I've backed up my phrase →
+          </button>
+        </div>
+      {:else}
+        <!-- 1b: Verification — type all 12 words back in -->
+        <div class="space-y-4">
+          <div>
+            <p class="text-sm font-medium text-gray-100">
+              Verify your recovery phrase
+            </p>
+            <p class="mt-1 text-xs text-gray-400">
+              Type each word in the correct order to confirm you've written them
+              down.
+            </p>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            {#each verificationInputs as _, i}
+              {@const typed = verificationInputs[i]}
+              {@const isWrong =
+                typed.length > 0 && typed.trim() !== seedWords[i]}
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-medium text-gray-500">{i + 1}.</span>
+                <input
+                  type="text"
+                  bind:value={verificationInputs[i]}
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  placeholder="word {i + 1}"
+                  class="block w-full rounded-md border bg-surface-700 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-600 focus:ring-1 focus:outline-none
+                    {isWrong
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                    : 'border-surface-500 focus:border-bitcoin-500 focus:ring-bitcoin-500'}"
+                />
+              </div>
+            {/each}
+          </div>
+          {#if verificationInputs.every((w) => w.length > 0) && !verificationPassed}
+            <p class="text-xs text-red-400">
+              One or more words don't match — check the highlighted fields.
+            </p>
+          {/if}
+          <div class="flex gap-2">
+            <button
+              onclick={() => {
+                showVerification = false;
+                verificationInputs = Array(12).fill('');
+              }}
+              class="flex-1 rounded-md border border-surface-500 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-surface-700"
+            >
+              ← Back
+            </button>
+            <button
+              onclick={handleConfirmBackup}
+              disabled={!verificationPassed || arkWalletState.loading}
+              class="flex-1 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {arkWalletState.loading
+                ? 'Building wallet…'
+                : 'Verify & Continue →'}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <!-- STEP 2 — Boarding -->
     {:else if arkWalletState.step === 'boarding' || arkWalletState.step === 'boarding-pending'}
