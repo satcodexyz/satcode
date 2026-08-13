@@ -1,9 +1,20 @@
 <script lang="ts">
   import JurorCard from '$lib/components/JurorCard.svelte';
   import Modal from '$lib/components/Modal.svelte';
-  import { authState } from '$lib/auth.svelte';
+  import { authState, login } from '$lib/auth.svelte';
   import { formatSats } from '$lib/format';
   import type { Juror } from '$lib/types/juror';
+  import { ndk } from '$lib/ndk';
+  import { NDKEvent } from '@nostr-dev-kit/ndk';
+  import {
+    arkWalletState,
+    initWallet,
+    confirmBackup,
+    refreshBalance,
+    sendBond,
+    markReady
+  } from '$lib/arkWallet.svelte';
+  import { MIN_JUROR_BOND_SATS } from '$lib/config';
 
   // Mock data — replaced by live Nostr (kind:30060) queries in a later task
   const jurors: Juror[] = [
@@ -86,33 +97,107 @@
     activeJurors.reduce((sum, j) => sum + j.bondAmountSats, 0)
   );
 
-  // Modal state
+  // ---------------------------------------------------------------------------
+  // Modal / form state
+  // ---------------------------------------------------------------------------
   let showModal = $state(false);
-
-  // Join form state
-  const MIN_BOND = 100_000;
-  let bondAmountSats = $state<number | null>(null);
-  let signingPubkey = $state('');
   let specialisationsInput = $state('');
+  let bondAmountInput = $state<number>(MIN_JUROR_BOND_SATS);
+  let mnemonicConfirmed = $state(false);
+  let publishing = $state(false);
+  let publishError = $state<string | null>(null);
 
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
   );
 
-  const valid = $derived(
-    isLoggedIn &&
-      bondAmountSats !== null &&
-      Number.isInteger(bondAmountSats) &&
-      bondAmountSats >= MIN_BOND &&
-      signingPubkey.trim().length > 0
-  );
+  // Which progress pill is active (1-based, 4 steps total)
+  function getModalStepIndex(): number {
+    if (arkWalletState.step === 'needs-backup') return 1;
+    if (
+      arkWalletState.step === 'boarding' ||
+      arkWalletState.step === 'boarding-pending'
+    )
+      return 2;
+    if (arkWalletState.step === 'funded') return 3;
+    if (arkWalletState.step === 'bond-sent' || arkWalletState.step === 'ready')
+      return 4;
+    return 0;
+  }
+  const modalStepIndex = $derived(getModalStepIndex());
+
+  function getPillClass(i: number): string {
+    if (i + 1 < modalStepIndex) return 'bg-bitcoin-500';
+    if (i + 1 === modalStepIndex) return 'bg-bitcoin-400';
+    return 'bg-surface-600';
+  }
 
   const inputClasses =
-    'mt-1 block w-full rounded-md border-surface-500 bg-surface-700 text-sm text-gray-100 placeholder-gray-600 focus:border-bitcoin-500 focus:ring-bitcoin-500';
+    'mt-1 block w-full rounded-md border border-surface-500 bg-surface-700 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-bitcoin-500 focus:outline-none focus:ring-1 focus:ring-bitcoin-500';
 
-  function handleSubmit(e: SubmitEvent) {
-    e.preventDefault(); // publishing to Nostr (kind:30060) wired up in a later task
-    showModal = false;
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+
+  async function openModal() {
+    showModal = true;
+    mnemonicConfirmed = false;
+    publishError = null;
+    if (arkWalletState.step === 'uninitialised') {
+      await initWallet();
+    }
+  }
+
+  async function handleConfirmBackup() {
+    await confirmBackup();
+  }
+
+  async function handleRefreshBalance() {
+    await refreshBalance();
+  }
+
+  async function handleSendBond() {
+    await sendBond(bondAmountInput);
+  }
+
+  async function handlePublishRegistration() {
+    publishError = null;
+    publishing = true;
+    try {
+      if (!isLoggedIn)
+        throw new Error('You must be logged in with Nostr to register.');
+      const vtxoOutpoint = arkWalletState.bondVtxoOutpoint;
+      if (!vtxoOutpoint)
+        throw new Error('Bond VTXO outpoint not available yet.');
+      const jurorPubkey = arkWalletState.jurorPubkeyHex;
+      if (!jurorPubkey) throw new Error('Juror signing pubkey not available.');
+
+      const specs = specialisationsInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      // d tag: first 32 hex chars of the juror Bitcoin pubkey — deterministic per key
+      const dTag = jurorPubkey.slice(0, 32);
+
+      const event = new NDKEvent(ndk());
+      event.kind = 30060;
+      event.content = '';
+      event.tags = [
+        ['d', dTag],
+        ['juror_signing_pubkey', jurorPubkey],
+        ['bond_vtxo', vtxoOutpoint],
+        ['bond_amount_sats', String(bondAmountInput)],
+        ...(specs.length > 0 ? [['specialisations', ...specs]] : []),
+        ['availability', 'active']
+      ];
+      await event.publish();
+      markReady();
+    } catch (err) {
+      publishError =
+        err instanceof Error ? err.message : 'Failed to publish registration.';
+    } finally {
+      publishing = false;
+    }
   }
 </script>
 
@@ -151,7 +236,7 @@
         Min. bond
       </p>
       <p class="mt-1 text-2xl font-bold text-gray-100">
-        {formatSats(MIN_BOND)}
+        {formatSats(MIN_JUROR_BOND_SATS)}
       </p>
     </div>
   </div>
@@ -169,9 +254,9 @@
       <div>
         <h2 class="text-xl font-bold text-gray-100">Become a Juror</h2>
         <p class="mt-1 text-sm text-gray-400">
-          Stake a bond of at least {formatSats(MIN_BOND)} to register as juror. You'll
-          earn sats on every dispute you help resolve. Voting without reasoning, or
-          missing a vote, may result in a partial bond slash.
+          Stake a bond of at least {formatSats(MIN_JUROR_BOND_SATS)} to register as
+          juror. You'll earn sats on every dispute you help resolve. Voting without
+          reasoning, or missing a vote, may result in a partial bond slash.
         </p>
       </div>
     </div>
@@ -183,8 +268,8 @@
       <p class="font-medium text-gray-300">How it works</p>
       <ul class="mt-2 list-inside list-disc space-y-1">
         <li>
-          Create an Ark vTXO of at least {formatSats(MIN_BOND)} locked to a juror
-          bond script.
+          Create an Ark vTXO of at least {formatSats(MIN_JUROR_BOND_SATS)} locked
+          to a juror bond script.
         </li>
         <li>
           Click <strong class="text-gray-300">Become a juror</strong> and submit your
@@ -195,7 +280,7 @@
       </ul>
     </div>
     <button
-      onclick={() => (showModal = true)}
+      onclick={openModal}
       class="mt-4 shrink-0 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500"
     >
       Become a juror
@@ -209,9 +294,12 @@
   labelId="juror-modal-title"
 >
   <div class="w-full max-w-lg">
+    <!-- Header -->
     <div class="mb-6 flex items-center justify-between gap-4">
       <h2 id="juror-modal-title" class="text-xl font-bold text-gray-100">
-        Become a Juror
+        {arkWalletState.step === 'ready'
+          ? '✅ Registered as Juror'
+          : 'Become a Juror'}
       </h2>
       <button
         onclick={() => (showModal = false)}
@@ -234,75 +322,344 @@
       </button>
     </div>
 
-    <form class="space-y-5" onsubmit={handleSubmit}>
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">Bond amount (sats)</span
+    <!-- Step progress pills -->
+    {#if arkWalletState.step !== 'ready'}
+      <div class="mb-6 flex gap-2">
+        {#each ['Wallet', 'Deposit', 'Bond', 'Register'] as label, i (label)}
+          <div class="flex flex-1 flex-col items-center gap-1">
+            <div class="h-1.5 w-full rounded-full {getPillClass(i)}"></div>
+            <span
+              class="text-xs {i + 1 <= modalStepIndex
+                ? 'text-bitcoin-400'
+                : 'text-gray-500'}">{label}</span
+            >
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Error banner -->
+    {#if arkWalletState.error}
+      <div
+        class="mb-4 rounded-md border border-red-700 bg-red-950 px-4 py-3 text-sm text-red-300"
+      >
+        {arkWalletState.error}
+      </div>
+    {/if}
+
+    <!-- STEP 0 — Initialising -->
+    {#if arkWalletState.step === 'uninitialised'}
+      <div class="flex items-center gap-3 text-gray-400">
+        <svg
+          class="h-5 w-5 animate-spin"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
         >
-        <input
-          type="number"
-          bind:value={bondAmountSats}
-          min={MIN_BOND}
-          step="1000"
-          required
-          placeholder={String(MIN_BOND)}
-          class={inputClasses}
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          Minimum {formatSats(MIN_BOND)}. Must already be locked in an Ark vTXO
-          with the juror bond script.
-        </span>
-      </label>
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8H4z"
+          ></path>
+        </svg>
+        <span>Initialising wallet…</span>
+      </div>
 
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">
-          Bitcoin signing pubkey (hex)
-        </span>
-        <input
-          type="text"
-          bind:value={signingPubkey}
-          required
-          placeholder="02abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678"
-          class="{inputClasses} font-mono"
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          The key used to sign dispute votes and threshold witnesses. Not your
-          Nostr key.
-        </span>
-      </label>
+      <!-- STEP 1 — Mnemonic backup -->
+    {:else if arkWalletState.step === 'needs-backup'}
+      <div class="space-y-4">
+        <p class="text-sm text-gray-300">
+          A fresh Arkade wallet has been generated.
+          <strong class="text-gray-100">Write down these 12 words</strong> — they
+          are the only way to recover your funds.
+        </p>
+        <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
+          <p
+            class="font-mono text-sm leading-relaxed tracking-wide text-bitcoin-300 select-all"
+          >
+            {arkWalletState.mnemonic}
+          </p>
+        </div>
+        <p class="text-xs text-gray-500">
+          The mnemonic is stored in your browser's localStorage. Once you
+          confirm, it is cleared from memory.
+        </p>
+        <label class="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            bind:checked={mnemonicConfirmed}
+            class="mt-0.5 h-4 w-4 rounded border-surface-500 bg-surface-700 text-bitcoin-500 focus:ring-bitcoin-500"
+          />
+          <span class="text-sm text-gray-300"
+            >I have written down my recovery phrase and stored it safely.</span
+          >
+        </label>
+        <button
+          onclick={handleConfirmBackup}
+          disabled={!mnemonicConfirmed || arkWalletState.loading}
+          class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {arkWalletState.loading
+            ? 'Building wallet…'
+            : "I've backed up my phrase →"}
+        </button>
+      </div>
 
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">
-          Specialisations
-          <span class="font-normal text-gray-500">(optional)</span>
-        </span>
-        <input
-          type="text"
-          bind:value={specialisationsInput}
-          placeholder="rust, bitcoin, cryptography"
-          class={inputClasses}
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          Comma-separated skill tags used for panel matching.
-        </span>
-      </label>
-
-      <div>
-        {#if !isLoggedIn}
-          <p class="mb-3 text-xs text-gray-400">
-            You must be logged in with Nostr to register as a juror.
+      <!-- STEP 2 — Boarding -->
+    {:else if arkWalletState.step === 'boarding' || arkWalletState.step === 'boarding-pending'}
+      <div class="space-y-4">
+        <p class="text-sm text-gray-300">
+          Send at least <strong class="text-gray-100"
+            >{formatSats(MIN_JUROR_BOND_SATS)}</strong
+          > to this Bitcoin address. After 1 confirmation it will be onboarded to
+          Ark automatically.
+        </p>
+        {#if arkWalletState.boardingAddress}
+          <div>
+            <p
+              class="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase"
+            >
+              Boarding address
+            </p>
+            <div
+              class="flex items-center gap-2 rounded-md border border-surface-500 bg-surface-800 px-3 py-2"
+            >
+              <span class="flex-1 font-mono text-xs break-all text-gray-200"
+                >{arkWalletState.boardingAddress}</span
+              >
+              <button
+                onclick={() =>
+                  navigator.clipboard.writeText(arkWalletState.boardingAddress!)}
+                title="Copy"
+                aria-label="Copy boarding address"
+                class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:bg-surface-600 hover:text-gray-200"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                  <path
+                    d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        {/if}
+        {#if arkWalletState.step === 'boarding-pending'}
+          <div
+            class="flex items-center gap-2 rounded-md border border-yellow-700 bg-yellow-950 px-3 py-2 text-sm text-yellow-300"
+          >
+            <svg
+              class="h-4 w-4 shrink-0 animate-spin"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              ></path>
+            </svg>
+            Deposit detected — waiting for confirmation and Ark onboarding…
+          </div>
+        {:else}
+          <p class="text-xs text-gray-500">
+            Waiting for a deposit to this address…
           </p>
         {/if}
         <button
-          type="submit"
-          disabled={!valid}
-          class="rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500 disabled:cursor-not-allowed disabled:opacity-50"
+          onclick={handleRefreshBalance}
+          disabled={arkWalletState.loading}
+          class="w-full rounded-md border border-surface-500 bg-surface-700 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-surface-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Register as juror
+          {arkWalletState.loading ? 'Checking…' : '↻ Check balance'}
         </button>
-        <p class="mt-2 text-xs text-gray-500">
-          Publishing to Nostr isn't wired up yet.
-        </p>
       </div>
-    </form>
+
+      <!-- STEP 3 — Bond send -->
+    {:else if arkWalletState.step === 'funded'}
+      <div class="space-y-4">
+        <p class="text-sm text-gray-300">
+          Your wallet is funded. Lock your bond into the juror bond script on
+          Ark.
+        </p>
+        {#if arkWalletState.balance}
+          <div
+            class="rounded-md border border-surface-600 bg-surface-800 px-4 py-3 text-sm"
+          >
+            <span class="text-gray-400">Available: </span>
+            <span class="font-semibold text-gray-100"
+              >{formatSats(arkWalletState.balance.available)}</span
+            >
+          </div>
+        {/if}
+        <label class="block">
+          <span class="text-sm font-medium text-gray-300"
+            >Bond amount (sats)</span
+          >
+          <input
+            type="number"
+            bind:value={bondAmountInput}
+            min={MIN_JUROR_BOND_SATS}
+            step={1000}
+            class={inputClasses}
+          />
+          <span class="mt-1 block text-xs text-gray-500"
+            >Minimum {formatSats(MIN_JUROR_BOND_SATS)}. Locked in the juror bond
+            script.</span
+          >
+        </label>
+        {#if arkWalletState.bondAddress}
+          <div>
+            <p
+              class="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase"
+            >
+              Bond script address
+            </p>
+            <p class="font-mono text-xs break-all text-gray-400">
+              {arkWalletState.bondAddress}
+            </p>
+          </div>
+        {/if}
+        <button
+          onclick={handleSendBond}
+          disabled={arkWalletState.loading ||
+            bondAmountInput < MIN_JUROR_BOND_SATS}
+          class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {arkWalletState.loading
+            ? 'Sending…'
+            : `Lock ${formatSats(bondAmountInput)} as bond →`}
+        </button>
+      </div>
+
+      <!-- STEP 4 — Publish kind:30060 -->
+    {:else if arkWalletState.step === 'bond-sent'}
+      <div class="space-y-4">
+        <div
+          class="flex items-center gap-2 rounded-md border border-green-700 bg-green-950 px-3 py-2 text-sm text-green-300"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4 shrink-0"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414L8.414 15 3.293 9.879a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          Bond locked! VTXO:
+          <span class="ml-1 font-mono"
+            >{arkWalletState.bondVtxoOutpoint ?? '…'}</span
+          >
+        </div>
+        <p class="text-sm text-gray-300">
+          Publish your Nostr registration event (kind:30060) to join the juror
+          pool.
+        </p>
+        {#if !isLoggedIn}
+          <div
+            class="rounded-md border border-surface-500 bg-surface-800 px-4 py-3"
+          >
+            <p class="mb-2 text-sm text-gray-300">
+              You need to be logged in with Nostr to register.
+            </p>
+            <button
+              onclick={login}
+              class="rounded-md bg-surface-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:bg-surface-500"
+            >
+              Connect Nostr (NIP-07)
+            </button>
+          </div>
+        {:else}
+          <div
+            class="rounded-md border border-surface-600 bg-surface-800 px-4 py-3 text-sm"
+          >
+            <span class="text-gray-400">Signing as: </span>
+            <span class="font-mono text-gray-200"
+              >{authState.user?.npub?.slice(0, 20)}…</span
+            >
+          </div>
+        {/if}
+        <label class="block">
+          <span class="text-sm font-medium text-gray-300"
+            >Specialisations <span class="font-normal text-gray-500"
+              >(optional)</span
+            ></span
+          >
+          <input
+            type="text"
+            bind:value={specialisationsInput}
+            placeholder="rust, bitcoin, cryptography"
+            class={inputClasses}
+          />
+          <span class="mt-1 block text-xs text-gray-500"
+            >Comma-separated skill tags for panel matching.</span
+          >
+        </label>
+        {#if publishError}<p class="text-sm text-red-400">
+            {publishError}
+          </p>{/if}
+        <button
+          onclick={handlePublishRegistration}
+          disabled={!isLoggedIn ||
+            publishing ||
+            !arkWalletState.bondVtxoOutpoint}
+          class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {publishing ? 'Publishing…' : 'Publish registration →'}
+        </button>
+      </div>
+
+      <!-- DONE -->
+    {:else if arkWalletState.step === 'ready'}
+      <div class="space-y-4 text-center">
+        <div class="text-5xl">🎉</div>
+        <p class="text-lg font-semibold text-gray-100">
+          You are registered as a juror!
+        </p>
+        <p class="text-sm text-gray-400">
+          Your bond is locked and your registration event is live on Nostr. You
+          may now be selected for dispute panels.
+        </p>
+        {#if arkWalletState.bondVtxoOutpoint}
+          <p class="font-mono text-xs text-gray-500">
+            Bond VTXO: {arkWalletState.bondVtxoOutpoint}
+          </p>
+        {/if}
+        <button
+          onclick={() => (showModal = false)}
+          class="rounded-md bg-surface-600 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-surface-500"
+        >
+          Close
+        </button>
+      </div>
+    {/if}
   </div>
 </Modal>
