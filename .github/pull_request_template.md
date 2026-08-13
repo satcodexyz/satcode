@@ -10,10 +10,13 @@ Closes #
 
 ## Author checklist
 
+`bun run pr` runs all the commands below in one go.
+
 - [ ] Matches the spec
-- [ ] `bun run test` - all tests pass
 - [ ] `bun run format` - code has been formatted
-- [ ] `bun run lint` - no eslint errors
+- [ ] `bun run lint` - no prettier/eslint errors
+- [ ] `bun run check` - no svelte-check/TypeScript errors
+- [ ] `bun run test` - all tests pass
 - [ ] `bun run build` - build succeeds
 - [ ] I tested the relevant changes manually
 
