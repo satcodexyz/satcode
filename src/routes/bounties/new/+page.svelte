@@ -181,7 +181,7 @@
         </button>
         {#if !loggedIn}
           <p class="mt-2 text-xs text-gray-500">
-            Log in with Nostr (top right) to post a bounty.
+            Log in to post a bounty.
           </p>
         {/if}
         {#if publishError}
