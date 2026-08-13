@@ -147,7 +147,9 @@
         </label>
 
         <label class="block">
-          <span class="text-sm font-medium text-gray-300">Deadline (maker can claim the reward after this)</span>
+          <span class="text-sm font-medium text-gray-300"
+            >Deadline (maker can claim the reward after this)</span
+          >
           <input
             type="date"
             bind:value={deadline}
@@ -180,9 +182,7 @@
           {submitting ? 'Publishing…' : 'Post bounty'}
         </button>
         {#if !loggedIn}
-          <p class="mt-2 text-xs text-gray-500">
-            Log in to post a bounty.
-          </p>
+          <p class="mt-2 text-xs text-gray-500">Log in to post a bounty.</p>
         {/if}
         {#if publishError}
           <p class="mt-2 text-xs text-red-400">{publishError}</p>
