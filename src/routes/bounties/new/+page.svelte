@@ -116,7 +116,7 @@
           bind:value={title}
           maxlength="120"
           required
-          placeholder="Fix memory leak in Rust Bitcoin parser"
+          placeholder="Short title for the bounty"
           class={inputClasses}
         />
       </label>
@@ -127,7 +127,7 @@
           bind:value={description}
           rows="6"
           required
-          placeholder="What needs to be done, and what does success look like?"
+          placeholder="What needs to be done, and what are the exact bounty acceptance criteria?"
           class={inputClasses}></textarea>
         <span class="mt-1 block text-xs text-gray-500">Markdown supported</span>
       </label>
@@ -147,7 +147,7 @@
         </label>
 
         <label class="block">
-          <span class="text-sm font-medium text-gray-300">Deadline</span>
+          <span class="text-sm font-medium text-gray-300">Deadline (maker can claim the reward after this)</span>
           <input
             type="date"
             bind:value={deadline}
