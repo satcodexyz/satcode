@@ -97,7 +97,6 @@
     activeJurors.reduce((sum, j) => sum + j.bondAmountSats, 0)
   );
 
-<<<<<<< HEAD
   // ---------------------------------------------------------------------------
   // Modal / form state
   // ---------------------------------------------------------------------------
@@ -107,22 +106,11 @@
   let mnemonicConfirmed = $state(false);
   let publishing = $state(false);
   let publishError = $state<string | null>(null);
-=======
-  // Modal state
-  let showModal = $state(false);
-
-  // Join form state
-  const MIN_BOND = 100_000;
-  let bondAmountSats = $state<number | null>(null);
-  let signingPubkey = $state('');
-  let specialisationsInput = $state('');
->>>>>>> main
 
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
   );
 
-<<<<<<< HEAD
   // Which progress pill is active (1-based, 4 steps total)
   function getModalStepIndex(): number {
     if (arkWalletState.step === 'needs-backup') return 1;
@@ -210,22 +198,6 @@
     } finally {
       publishing = false;
     }
-=======
-  const valid = $derived(
-    isLoggedIn &&
-      bondAmountSats !== null &&
-      Number.isInteger(bondAmountSats) &&
-      bondAmountSats >= MIN_BOND &&
-      signingPubkey.trim().length > 0
-  );
-
-  const inputClasses =
-    'mt-1 block w-full rounded-md border-surface-500 bg-surface-700 text-sm text-gray-100 placeholder-gray-600 focus:border-bitcoin-500 focus:ring-bitcoin-500';
-
-  function handleSubmit(e: SubmitEvent) {
-    e.preventDefault(); // publishing to Nostr (kind:30060) wired up in a later task
-    showModal = false;
->>>>>>> main
   }
 </script>
 
@@ -264,11 +236,7 @@
         Min. bond
       </p>
       <p class="mt-1 text-2xl font-bold text-gray-100">
-<<<<<<< HEAD
         {formatSats(MIN_JUROR_BOND_SATS)}
-=======
-        {formatSats(MIN_BOND)}
->>>>>>> main
       </p>
     </div>
   </div>
@@ -286,15 +254,9 @@
       <div>
         <h2 class="text-xl font-bold text-gray-100">Become a Juror</h2>
         <p class="mt-1 text-sm text-gray-400">
-<<<<<<< HEAD
           Stake a bond of at least {formatSats(MIN_JUROR_BOND_SATS)} to register as
           juror. You'll earn sats on every dispute you help resolve. Voting without
           reasoning, or missing a vote, may result in a partial bond slash.
-=======
-          Stake a bond of at least {formatSats(MIN_BOND)} to register as juror. You'll
-          earn sats on every dispute you help resolve. Voting without reasoning, or
-          missing a vote, may result in a partial bond slash.
->>>>>>> main
         </p>
       </div>
     </div>
@@ -306,13 +268,8 @@
       <p class="font-medium text-gray-300">How it works</p>
       <ul class="mt-2 list-inside list-disc space-y-1">
         <li>
-<<<<<<< HEAD
           Create an Ark vTXO of at least {formatSats(MIN_JUROR_BOND_SATS)} locked
           to a juror bond script.
-=======
-          Create an Ark vTXO of at least {formatSats(MIN_BOND)} locked to a juror
-          bond script.
->>>>>>> main
         </li>
         <li>
           Click <strong class="text-gray-300">Become a juror</strong> and submit your
@@ -323,11 +280,7 @@
       </ul>
     </div>
     <button
-<<<<<<< HEAD
       onclick={openModal}
-=======
-      onclick={() => (showModal = true)}
->>>>>>> main
       class="mt-4 shrink-0 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500"
     >
       Become a juror
@@ -341,18 +294,12 @@
   labelId="juror-modal-title"
 >
   <div class="w-full max-w-lg">
-<<<<<<< HEAD
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between gap-4">
       <h2 id="juror-modal-title" class="text-xl font-bold text-gray-100">
         {arkWalletState.step === 'ready'
           ? '✅ Registered as Juror'
           : 'Become a Juror'}
-=======
-    <div class="mb-6 flex items-center justify-between gap-4">
-      <h2 id="juror-modal-title" class="text-xl font-bold text-gray-100">
-        Become a Juror
->>>>>>> main
       </h2>
       <button
         onclick={() => (showModal = false)}
@@ -375,7 +322,6 @@
       </button>
     </div>
 
-<<<<<<< HEAD
     <!-- Step progress pills -->
     {#if arkWalletState.step !== 'ready'}
       <div class="mb-6 flex gap-2">
@@ -491,7 +437,9 @@
               >
               <button
                 onclick={() =>
-                  navigator.clipboard.writeText(arkWalletState.boardingAddress!)}
+                  navigator.clipboard.writeText(
+                    arkWalletState.boardingAddress!
+                  )}
                 title="Copy"
                 aria-label="Copy boarding address"
                 class="shrink-0 rounded p-1 text-gray-500 transition-colors hover:bg-surface-600 hover:text-gray-200"
@@ -715,77 +663,5 @@
         </button>
       </div>
     {/if}
-=======
-    <form class="space-y-5" onsubmit={handleSubmit}>
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">Bond amount (sats)</span
-        >
-        <input
-          type="number"
-          bind:value={bondAmountSats}
-          min={MIN_BOND}
-          step="1000"
-          required
-          placeholder={String(MIN_BOND)}
-          class={inputClasses}
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          Minimum {formatSats(MIN_BOND)}. Must already be locked in an Ark vTXO
-          with the juror bond script.
-        </span>
-      </label>
-
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">
-          Bitcoin signing pubkey (hex)
-        </span>
-        <input
-          type="text"
-          bind:value={signingPubkey}
-          required
-          placeholder="02abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678"
-          class="{inputClasses} font-mono"
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          The key used to sign dispute votes and threshold witnesses. Not your
-          Nostr key.
-        </span>
-      </label>
-
-      <label class="block">
-        <span class="text-sm font-medium text-gray-300">
-          Specialisations
-          <span class="font-normal text-gray-500">(optional)</span>
-        </span>
-        <input
-          type="text"
-          bind:value={specialisationsInput}
-          placeholder="rust, bitcoin, cryptography"
-          class={inputClasses}
-        />
-        <span class="mt-1 block text-xs text-gray-500">
-          Comma-separated skill tags used for panel matching.
-        </span>
-      </label>
-
-      <div>
-        {#if !isLoggedIn}
-          <p class="mb-3 text-xs text-gray-400">
-            You must be logged in with Nostr to register as a juror.
-          </p>
-        {/if}
-        <button
-          type="submit"
-          disabled={!valid}
-          class="rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-bitcoin-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bitcoin-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Register as juror
-        </button>
-        <p class="mt-2 text-xs text-gray-500">
-          Publishing to Nostr isn't wired up yet.
-        </p>
-      </div>
-    </form>
->>>>>>> main
   </div>
 </Modal>
