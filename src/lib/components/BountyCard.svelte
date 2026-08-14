@@ -33,31 +33,34 @@
     };
 </script>
 
-<article
+<a
+  href={`/bounties/${bounty.id}`}
   class="rounded-xl border border-surface-600 bg-surface-800 p-5 transition-colors hover:border-bitcoin-500/60"
 >
-  <div class="flex items-center justify-between gap-2">
-    <span
-      class="rounded-full border px-2 py-0.5 text-xs font-medium {statusBadge[
-        bounty.status
-      ].classes}"
-    >
-      {statusBadge[bounty.status].label}
-    </span>
-    <span class="text-lg font-bold text-bitcoin-400">
-      {formatSats(bounty.amountSats)}
-    </span>
-  </div>
-  <h2 class="mt-3 text-base font-semibold text-gray-100">{bounty.title}</h2>
-  {#if bounty.tags.length > 0}
-    <ul class="mt-3 flex flex-wrap gap-1.5">
-      {#each bounty.tags as tag (tag)}
-        <li
-          class="rounded-md border border-surface-600 bg-surface-700 px-2 py-0.5 text-xs text-gray-400"
-        >
-          #{tag}
-        </li>
-      {/each}
-    </ul>
-  {/if}
-</article>
+  <article>
+    <div class="flex items-center justify-between gap-2">
+      <span
+        class="rounded-full border px-2 py-0.5 text-xs font-medium {statusBadge[
+          bounty.status
+        ].classes}"
+      >
+        {statusBadge[bounty.status].label}
+      </span>
+      <span class="text-lg font-bold text-bitcoin-400">
+        {formatSats(bounty.amountSats)}
+      </span>
+    </div>
+    <h2 class="mt-3 text-base font-semibold text-gray-100">{bounty.title}</h2>
+    {#if bounty.tags.length > 0}
+      <ul class="mt-3 flex flex-wrap gap-1.5">
+        {#each bounty.tags as tag (tag)}
+          <li
+            class="rounded-md border border-surface-600 bg-surface-700 px-2 py-0.5 text-xs text-gray-400"
+          >
+            #{tag}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </article>
+</a>
