@@ -22,7 +22,7 @@ import {
   Ramps,
   type WalletBalance
 } from '@arkade-os/sdk';
-import { generateMnemonic } from '@scure/bip39';
+import { generateMnemonic, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { hex } from '@scure/base';
 import {
@@ -419,6 +419,45 @@ export async function sendBond(bondAmountSats: number): Promise<void> {
 export function markReady(): void {
   arkWalletState.step = 'ready';
   saveStep('ready');
+}
+/**
+ * Import an existing BIP-39 mnemonic instead of using the freshly generated one.
+ *
+ * Validates the phrase, saves it to localStorage (overwriting any generated
+ * phrase), then immediately builds the wallet and advances to 'boarding' —
+ * skipping the seed-backup verification step because the user has demonstrated
+ * they already know the phrase by typing it in.
+ */
+export async function importWallet(phrase: string): Promise<void> {
+  clearError();
+
+  const normalised = phrase.trim().replace(/\s+/g, ' ');
+  if (!validateMnemonic(normalised, wordlist)) {
+    setError('Invalid seed phrase. Please check each word and try again.');
+    return;
+  }
+
+  arkWalletState.loading = true;
+
+  saveMnemonic(normalised);
+  // Keep mnemonic in reactive state null — user typed it, no need to display it.
+  arkWalletState.mnemonic = null;
+
+  try {
+    _wallet = await buildWallet(normalised);
+    const { boardingAddress, pubkeyHex, bondAddr } =
+      await deriveWalletMeta(_wallet);
+    arkWalletState.boardingAddress = boardingAddress;
+    arkWalletState.jurorPubkeyHex = pubkeyHex;
+    arkWalletState.bondAddress = bondAddr;
+    arkWalletState.step = 'boarding';
+    saveStep('boarding');
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to import wallet');
+    return;
+  }
+
+  arkWalletState.loading = false;
 }
 
 /** Reset wallet state without wiping localStorage (useful for testing). */

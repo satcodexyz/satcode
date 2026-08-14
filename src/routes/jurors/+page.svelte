@@ -10,6 +10,7 @@
     arkWalletState,
     initWallet,
     confirmBackup,
+    importWallet,
     refreshBalance,
     sendBond,
     markReady
@@ -110,6 +111,14 @@
   let showVerification = $state(false);
   let verificationInputs = $state<string[]>(Array(12).fill(''));
 
+  // Import existing seed state
+  let showImport = $state(false);
+  let importInputs = $state<string[]>(Array(12).fill(''));
+  let importError = $state<string | null>(null);
+
+  const importPhrase = $derived(importInputs.join(' ').trim());
+  const importAllFilled = $derived(importInputs.every((w) => w.trim().length > 0));
+
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
   );
@@ -161,6 +170,9 @@
     showModal = true;
     showVerification = false;
     verificationInputs = Array(12).fill('');
+    showImport = false;
+    importInputs = Array(12).fill('');
+    importError = null;
     publishError = null;
     if (arkWalletState.step === 'uninitialised') {
       await initWallet();
@@ -178,6 +190,16 @@
       verificationInputs = Array(12).fill('');
     } else if (verificationPassed) {
       await confirmBackup();
+    }
+  }
+
+  async function handleImportWallet() {
+    importError = null;
+    await importWallet(importPhrase);
+    // importWallet sets arkWalletState.error on failure; mirror it locally too
+    // so the import screen can show it inline without relying on the top banner.
+    if (arkWalletState.error) {
+      importError = arkWalletState.error;
     }
   }
 
@@ -410,41 +432,102 @@
       <!-- STEP 1 — Mnemonic backup -->
     {:else if arkWalletState.step === 'needs-backup'}
       {#if !showVerification}
-        <!-- 1a: Display the numbered seed phrase -->
-        <div class="space-y-4">
-          <p class="text-sm text-gray-300">
-            A fresh Arkade wallet has been generated.
-            <strong class="text-gray-100">Write down these 12 words</strong> in order
-            — they are the only way to recover your funds.
-          </p>
-          <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
+        {#if showImport}
+          <!-- 1a-import: Enter an existing seed phrase -->
+          <div class="space-y-4">
+            <p class="text-sm text-gray-300">
+              Enter your existing 12-word BIP-39 seed phrase. It will be saved
+              to your browser's localStorage.
+            </p>
             <div class="grid grid-cols-3 gap-2">
-              {#each seedWords as word, i}
-                <div
-                  class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5"
-                >
-                  <span
-                    class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
+              {#each importInputs as _, i}
+                <div class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5">
+                  <span class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
                     >{i + 1}.</span
                   >
-                  <span class="font-mono text-sm text-bitcoin-300 select-all"
-                    >{word}</span
-                  >
+                  <input
+                    type="text"
+                    bind:value={importInputs[i]}
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    class="w-full bg-transparent font-mono text-sm text-gray-100 placeholder-gray-600 outline-none"
+                    placeholder="word"
+                  />
                 </div>
               {/each}
             </div>
+            {#if importError}
+              <p class="text-xs text-red-400">{importError}</p>
+            {/if}
+            <div class="flex gap-2">
+              <button
+                onclick={() => {
+                  showImport = false;
+                  importInputs = Array(12).fill('');
+                  importError = null;
+                }}
+                class="flex-1 rounded-md border border-surface-500 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-surface-700"
+              >
+                ← Back
+              </button>
+              <button
+                onclick={handleImportWallet}
+                disabled={!importAllFilled || arkWalletState.loading}
+                class="flex-1 rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {arkWalletState.loading ? 'Importing…' : 'Import wallet →'}
+              </button>
+            </div>
           </div>
-          <p class="text-xs text-gray-500">
-            The recovery phrase is stored in your browser's localStorage. Once
-            you verify it, it will be cleared from memory.
-          </p>
-          <button
-            onclick={handleConfirmBackup}
-            class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600"
-          >
-            I've backed up my phrase →
-          </button>
-        </div>
+        {:else}
+          <!-- 1a: Display the numbered seed phrase -->
+          <div class="space-y-4">
+            <p class="text-sm text-gray-300">
+              A fresh Arkade wallet has been generated.
+              <strong class="text-gray-100">Write down these 12 words</strong> in order
+              — they are the only way to recover your funds.
+            </p>
+            <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
+              <div class="grid grid-cols-3 gap-2">
+                {#each seedWords as word, i}
+                  <div
+                    class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5"
+                  >
+                    <span
+                      class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
+                      >{i + 1}.</span
+                    >
+                    <span class="font-mono text-sm text-bitcoin-300 select-all"
+                      >{word}</span
+                    >
+                  </div>
+                {/each}
+              </div>
+            </div>
+            <p class="text-xs text-gray-500">
+              The recovery phrase is stored in your browser's localStorage. Once
+              you verify it, it will be cleared from memory.
+            </p>
+            <button
+              onclick={() => {
+                showImport = true;
+                importInputs = Array(12).fill('');
+                importError = null;
+              }}
+              class="w-full text-center text-sm text-bitcoin-400 hover:underline cursor-pointer"
+            >
+              Import existing seed phrase
+            </button>
+            <button
+              onclick={handleConfirmBackup}
+              class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600"
+            >
+              I've backed up my phrase →
+            </button>
+          </div>
+        {/if}
       {:else}
         <!-- 1b: Verification — type all 12 words back in -->
         <div class="space-y-4">
