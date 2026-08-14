@@ -13,9 +13,11 @@
     importWallet,
     refreshBalance,
     sendBond,
-    markReady
+    markReady,
+    resolveBondVtxo
   } from '$lib/arkWallet.svelte';
   import { MIN_JUROR_BOND_SATS } from '$lib/config';
+  import UserAvatar from '$lib/components/UserAvatar.svelte';
 
   // Mock data — replaced by live Nostr (kind:30060) queries in a later task
   const jurors: Juror[] = [
@@ -117,7 +119,9 @@
   let importError = $state<string | null>(null);
 
   const importPhrase = $derived(importInputs.join(' ').trim());
-  const importAllFilled = $derived(importInputs.every((w) => w.trim().length > 0));
+  const importAllFilled = $derived(
+    importInputs.every((w) => w.trim().length > 0)
+  );
 
   const isLoggedIn = $derived(
     authState.status === 'ready' && authState.user !== null
@@ -441,8 +445,11 @@
             </p>
             <div class="grid grid-cols-3 gap-2">
               {#each importInputs as _, i}
-                <div class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5">
-                  <span class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
+                <div
+                  class="flex items-center gap-1.5 rounded border border-surface-600 bg-surface-900 px-2 py-1.5"
+                >
+                  <span
+                    class="w-5 shrink-0 text-right text-xs font-medium text-gray-500"
                     >{i + 1}.</span
                   >
                   <input
@@ -486,10 +493,12 @@
           <div class="space-y-4">
             <p class="text-sm text-gray-300">
               A fresh Arkade wallet has been generated.
-              <strong class="text-gray-100">Write down these 12 words</strong> in order
-              — they are the only way to recover your funds.
+              <strong class="text-gray-100">Write down these 12 words</strong> in
+              order — they are the only way to recover your funds.
             </p>
-            <div class="rounded-md border border-surface-500 bg-surface-800 p-4">
+            <div
+              class="rounded-md border border-surface-500 bg-surface-800 p-4"
+            >
               <div class="grid grid-cols-3 gap-2">
                 {#each seedWords as word, i}
                   <div
@@ -516,7 +525,7 @@
                 importInputs = Array(12).fill('');
                 importError = null;
               }}
-              class="w-full text-center text-sm text-bitcoin-400 hover:underline cursor-pointer"
+              class="w-full cursor-pointer text-center text-sm text-bitcoin-400 hover:underline"
             >
               Import existing seed phrase
             </button>
@@ -597,15 +606,46 @@
         <p class="text-sm text-gray-300">
           Send at least <strong class="text-gray-100"
             >{formatSats(MIN_JUROR_BOND_SATS)}</strong
-          > to this Bitcoin address. After 1 confirmation it will be onboarded to
-          Ark automatically.
+          > to this address. After 1 confirmation it will be onboarded to Ark automatically.
         </p>
+        <!-- Network warning -->
+        <div
+          class="flex items-start gap-2 rounded-md border border-amber-700 bg-amber-950 px-3 py-2 text-xs text-amber-300"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <span
+            >This is a <strong class="text-amber-200">Mutinynet (signet)</strong
+            >
+            address — <em>not</em> Bitcoin testnet3. Use a Mutinynet faucet such
+            as
+            <a
+              href="https://faucet.mutinynet.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="underline hover:text-amber-100">faucet.mutinynet.com</a
+            > to fund it. Testnet3 coins sent here will not be detected.</span
+          >
+        </div>
         {#if arkWalletState.boardingAddress}
           <div>
             <p
               class="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase"
             >
-              Boarding address
+              Boarding address <span class="text-amber-500 normal-case"
+                >(Mutinynet signet)</span
+              >
             </p>
             <div
               class="flex items-center gap-2 rounded-md border border-surface-500 bg-surface-800 px-3 py-2"
@@ -738,30 +778,67 @@
       <!-- STEP 4 — Publish kind:30060 -->
     {:else if arkWalletState.step === 'bond-sent'}
       <div class="space-y-4">
-        <div
-          class="flex items-center gap-2 rounded-md border border-green-700 bg-green-950 px-3 py-2 text-sm text-green-300"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4 shrink-0"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
+        {#if arkWalletState.bondVtxoOutpoint}
+          <!-- VTXO resolved — show green confirmation -->
+          <div
+            class="flex items-center gap-2 rounded-md border border-green-700 bg-green-950 px-3 py-2 text-sm text-green-300"
           >
-            <path
-              fill-rule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414L8.414 15 3.293 9.879a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          Bond locked! VTXO:
-          <span class="ml-1 font-mono"
-            >{arkWalletState.bondVtxoOutpoint ?? '…'}</span
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4 shrink-0"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414L8.414 15 3.293 9.879a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Bond locked! VTXO:
+            <span class="ml-1 font-mono">{arkWalletState.bondVtxoOutpoint}</span>
+          </div>
+        {:else}
+          <!-- VTXO not yet indexed — show amber notice with retry -->
+          <div
+            class="flex items-start gap-2 rounded-md border border-amber-700 bg-amber-950 px-3 py-2 text-sm text-amber-300"
           >
-        </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="mt-0.5 h-4 w-4 shrink-0 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              />
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
+            </svg>
+            <span>
+              Bond sent — waiting for the Ark server to index your VTXO…
+              <br />
+              <button
+                onclick={() => resolveBondVtxo()}
+                class="mt-1 underline hover:text-amber-100"
+              >
+                Retry VTXO lookup
+              </button>
+            </span>
+          </div>
+        {/if}
         <p class="text-sm text-gray-300">
-          Publish your Nostr registration event (kind:30060) to join the juror
-          pool.
+          List your expertise below and join the juror registry.
         </p>
         {#if !isLoggedIn}
           <div
@@ -779,12 +856,14 @@
           </div>
         {:else}
           <div
-            class="rounded-md border border-surface-600 bg-surface-800 px-4 py-3 text-sm"
+            class="flex gap-2 rounded-md border border-surface-600 bg-surface-800 px-4 py-3 text-sm"
           >
             <span class="text-gray-400">Signing as: </span>
-            <span class="font-mono text-gray-200"
-              >{authState.user?.npub?.slice(0, 20)}…</span
-            >
+            <UserAvatar
+              profile={authState.profile}
+              user={authState.user}
+              size="sm"
+            />
           </div>
         {/if}
         <label class="block">

@@ -294,12 +294,42 @@ export async function confirmBackup(): Promise<void> {
 
 /**
  * Refresh balance and auto-advance state where possible.
+ *
+ * If `_wallet` is null (e.g. after a network error during `initWallet()` that
+ * left the step stored but the in-memory wallet unset), we attempt to rebuild
+ * it from the stored mnemonic before proceeding rather than silently bailing.
  */
 export async function refreshBalance(): Promise<void> {
-  if (!_wallet) return;
   clearError();
+  arkWalletState.loading = true;
 
   try {
+    // Re-hydrate the wallet if the in-memory instance was lost (e.g. after a
+    // failed initWallet() call or a page reload that left step in localStorage
+    // but _wallet unset because the modal was never fully re-opened).
+    if (!_wallet) {
+      const phrase = storedMnemonic();
+      if (!phrase) {
+        setError('Wallet not initialised. Please close and reopen this dialog.');
+        return;
+      }
+      try {
+        _wallet = await buildWallet(phrase);
+        const { boardingAddress, pubkeyHex, bondAddr } =
+          await deriveWalletMeta(_wallet);
+        arkWalletState.boardingAddress = boardingAddress;
+        arkWalletState.jurorPubkeyHex = pubkeyHex;
+        arkWalletState.bondAddress = bondAddr;
+      } catch (initErr) {
+        setError(
+          initErr instanceof Error
+            ? initErr.message
+            : 'Failed to reconnect wallet. Check your network connection and try again.'
+        );
+        return;
+      }
+    }
+
     const balance = await _wallet.getBalance();
     arkWalletState.balance = balance;
 
@@ -316,6 +346,13 @@ export async function refreshBalance(): Promise<void> {
     }
   } catch (err) {
     setError(err instanceof Error ? err.message : 'Failed to refresh balance');
+  } finally {
+    // Only clear loading if onboard() didn't already take over (onboard sets
+    // and clears loading itself); guard against double-clear by checking the
+    // step — onboard() sets loading = false on its own exit path.
+    if (arkWalletState.loading) {
+      arkWalletState.loading = false;
+    }
   }
 }
 
@@ -389,22 +426,7 @@ export async function sendBond(bondAmountSats: number): Promise<void> {
     const balance = await _wallet.getBalance();
     arkWalletState.balance = balance;
 
-    // Resolve the VTXO outpoint for the bond script so it can be placed in
-    // the kind:30060 bond_vtxo tag.
-    // getVtxos() returns all VTXOs owned by this wallet; we filter by the
-    // bond script's pkScript (hex) to find the one we just created.
-    const jurorPubkeyBytes = hex.decode(arkWalletState.jurorPubkeyHex!);
-    const bondPkScriptHex = hex.encode(
-      buildJurorBondScript(jurorPubkeyBytes).pkScript
-    );
-    const vtxos = await _wallet.getVtxos();
-    const bondVtxo = vtxos.find(
-      (v) => !v.isSpent && v.script === bondPkScriptHex
-    );
-    if (bondVtxo) {
-      arkWalletState.bondVtxoOutpoint = `${bondVtxo.txid}:${bondVtxo.vout}`;
-    }
-
+    // Advance the step immediately so the UI unblocks.
     arkWalletState.step = 'bond-sent';
     saveStep('bond-sent');
   } catch (err) {
@@ -413,6 +435,88 @@ export async function sendBond(bondAmountSats: number): Promise<void> {
   }
 
   arkWalletState.loading = false;
+
+  // Resolve the VTXO outpoint asynchronously with retries.
+  // We do this after advancing the step so the user sees the confirmation
+  // banner straight away. The "Publish registration" button remains disabled
+  // until bondVtxoOutpoint is populated.
+  resolveBondVtxo().catch(() => {
+    // resolveBondVtxo sets arkWalletState.error itself; swallow here so the
+    // unhandled-rejection handler is not triggered.
+  });
+}
+
+// ---------------------------------------------------------------------------
+// VTXO resolution (with retry)
+// ---------------------------------------------------------------------------
+
+/**
+ * Retry delays between attempts (milliseconds).
+ * Gives the Ark server time to index the freshly-sent VTXO.
+ * Total worst-case wait: 1500 + 2000 + 3000 + 4000 = 10 500 ms.
+ */
+const VTXO_RETRY_DELAYS_MS = [1500, 2000, 3000, 4000];
+
+/**
+ * Try to find the bond VTXO in `getVtxos()`, retrying with increasing delays
+ * if the server hasn't indexed it yet.
+ *
+ * Sets `arkWalletState.bondVtxoOutpoint` on success.
+ * Sets `arkWalletState.error` (non-fatal) if all attempts fail.
+ */
+export async function resolveBondVtxo(): Promise<void> {
+  if (!_wallet || !arkWalletState.jurorPubkeyHex) return;
+
+  const jurorPubkeyBytes = hex.decode(arkWalletState.jurorPubkeyHex);
+  const bondPkScriptHex = hex.encode(
+    buildJurorBondScript(jurorPubkeyBytes).pkScript
+  );
+
+  const attempt = async (): Promise<boolean> => {
+    const vtxos = await _wallet!.getVtxos();
+    console.debug(
+      '[arkWallet] resolveBondVtxo — expected script:',
+      bondPkScriptHex,
+      '— actual unspent scripts:',
+      vtxos.filter((v) => !v.isSpent).map((v) => v.script)
+    );
+    const bondVtxo = vtxos.find(
+      (v) => !v.isSpent && v.script === bondPkScriptHex
+    );
+    if (bondVtxo) {
+      arkWalletState.bondVtxoOutpoint = `${bondVtxo.txid}:${bondVtxo.vout}`;
+      // Clear any prior "not indexed" warning.
+      if (
+        arkWalletState.error?.startsWith('Bond VTXO not yet indexed')
+      ) {
+        arkWalletState.error = null;
+      }
+      return true;
+    }
+    return false;
+  };
+
+  // First attempt immediately.
+  try {
+    if (await attempt()) return;
+  } catch {
+    // Network hiccup — fall through to retries.
+  }
+
+  // Subsequent attempts with delays.
+  for (const delay of VTXO_RETRY_DELAYS_MS) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      if (await attempt()) return;
+    } catch {
+      // Continue retrying.
+    }
+  }
+
+  // All attempts exhausted — surface a soft warning.
+  arkWalletState.error =
+    'Bond VTXO not yet indexed by the Ark server. ' +
+    'Your bond is locked — click "Retry VTXO lookup" to try again before publishing.';
 }
 
 /** Mark the wallet as fully ready (call after publishing Nostr registration). */
