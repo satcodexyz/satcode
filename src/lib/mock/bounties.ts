@@ -5,12 +5,14 @@ import type { Bounty, BountyComment, NostrProfile } from '$lib/types/bounty';
  *
  * When NDK integration is ready, replace this module with real fetches:
  *   export async function getBounties(): Promise<Bounty[]> { ... }
- *   export async function getBounty(id: string): Promise<Bounty | null> { ... }
+ *   export async function getBounty(address: string): Promise<Bounty | null> { ... }
  */
 
 export const mockBounties: Bounty[] = [
   {
     id: '1',
+    address:
+      '30050:npub1alice00000000000000000000000000000000000000000000000000:1',
     title: 'Add NIP-57 zap receipts to the bounty feed',
     description: `## Overview
 Implement NIP-57 zap receipt parsing so that the bounty feed shows how much has been zapped to each bounty.
@@ -34,6 +36,8 @@ Implement NIP-57 zap receipt parsing so that the bounty feed shows how much has 
   },
   {
     id: '2',
+    address:
+      '30050:npub1bob0000000000000000000000000000000000000000000000000000:2',
     title: 'Escrow state machine for Arkade multiparty flows',
     description: `## Overview
 Design and implement a state machine that manages escrow transitions for multi-party Bitcoin transactions using Arkade.
@@ -57,6 +61,8 @@ Design and implement a state machine that manages escrow transitions for multi-p
   },
   {
     id: '3',
+    address:
+      '30050:npub1alice00000000000000000000000000000000000000000000000000:3',
     title: 'Dark-mode landing page skeleton',
     description: `## Overview
 Create a responsive dark-mode landing page skeleton using Tailwind CSS.
@@ -131,8 +137,9 @@ export function getBounties(): Bounty[] {
   return mockBounties;
 }
 
-export function getBounty(id: string): Bounty | null {
-  return mockBounties.find((b) => b.id === id) ?? null;
+/** Looked up by address: BountyCard links by it, since event ids change on edit. */
+export function getBounty(address: string): Bounty | null {
+  return mockBounties.find((b) => b.address === address) ?? null;
 }
 
 export function getComments(bountyId: string): BountyComment[] {

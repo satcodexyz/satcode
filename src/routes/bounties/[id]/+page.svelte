@@ -11,6 +11,8 @@
 
   // TODO: Replace mock imports with NDK-based fetching:
   // import { getBounty, getComments, getProfile, shortPubkey } from '$lib/services/bounties';
+  // Until then only the mock bounties resolve here — the listing is already
+  // live, so a card for a real relay bounty lands on "Bounty not found".
 
   const isLoggedIn = false;
 
@@ -134,7 +136,7 @@
         </div>
         <span>·</span>
         <span>{timeAgo(bounty.createdAt)}</span>
-        {#if bounty.checkInIntervalDays > 0}
+        {#if (bounty.checkInIntervalDays ?? 0) > 0}
           <span>·</span>
           <span>Check-in every {bounty.checkInIntervalDays}d</span>
         {/if}
