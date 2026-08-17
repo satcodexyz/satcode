@@ -844,6 +844,22 @@
         <p class="text-sm text-gray-300">
           List your expertise below and join the juror registry.
         </p>
+        <label class="block">
+          <span class="text-sm font-medium text-gray-300"
+            >Specialisations <span class="font-normal text-gray-500"
+              >(optional)</span
+            ></span
+          >
+          <input
+            type="text"
+            bind:value={specialisationsInput}
+            placeholder="rust, bitcoin, cryptography"
+            class={inputClasses}
+          />
+          <span class="mt-1 block text-xs text-gray-500"
+            >Comma-separated skill tags for panel matching.</span
+          >
+        </label>
         {#if !isLoggedIn}
           <div
             class="rounded-md border border-surface-500 bg-surface-800 px-4 py-3"
@@ -870,22 +886,6 @@
             />
           </div>
         {/if}
-        <label class="block">
-          <span class="text-sm font-medium text-gray-300"
-            >Specialisations <span class="font-normal text-gray-500"
-              >(optional)</span
-            ></span
-          >
-          <input
-            type="text"
-            bind:value={specialisationsInput}
-            placeholder="rust, bitcoin, cryptography"
-            class={inputClasses}
-          />
-          <span class="mt-1 block text-xs text-gray-500"
-            >Comma-separated skill tags for panel matching.</span
-          >
-        </label>
         {#if publishError}<p class="text-sm text-red-400">
             {publishError}
           </p>{/if}
@@ -896,7 +896,7 @@
             !arkWalletState.bondVtxoOutpoint}
           class="w-full rounded-md bg-bitcoin-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bitcoin-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {publishing ? 'Publishing…' : 'Publish registration →'}
+          {publishing ? 'Publishing…' : 'Complete the registration →'}
         </button>
       </div>
 
