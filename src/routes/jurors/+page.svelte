@@ -324,14 +324,16 @@
       <ul class="mt-2 list-inside list-disc space-y-1">
         <li>
           Create an Ark vTXO of at least {formatSats(MIN_JUROR_BOND_SATS)} locked
-          to a juror bond script.
-        </li>
-        <li>
-          Click <strong class="text-gray-300">Become a juror</strong> and submit your
-          registration to Nostr (kind:30060).
+          to a juror bond.
         </li>
         <li>You'll be eligible for random selection onto dispute panels.</li>
         <li>Bonds must be refreshed every 30 days to maintain eligibility.</li>
+        <li>
+          <strong
+            >Jurors are expected to remain available during the bond lockup
+            period. Missing a dispute vote will result in a slashing penalty.</strong
+          >
+        </li>
       </ul>
     </div>
     <button
@@ -797,7 +799,9 @@
               />
             </svg>
             Bond locked! VTXO:
-            <span class="ml-1 font-mono">{arkWalletState.bondVtxoOutpoint}</span>
+            <span class="ml-1 font-mono" title={arkWalletState.bondVtxoOutpoint}
+              >{arkWalletState.bondVtxoOutpoint.slice(0, 20)}...</span
+            >
           </div>
         {:else}
           <!-- VTXO not yet indexed — show amber notice with retry -->

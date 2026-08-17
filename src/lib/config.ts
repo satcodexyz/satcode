@@ -46,6 +46,14 @@ export const MNEMONIC_STORAGE_KEY = 'satcode:juror:mnemonic';
 export const STEP_STORAGE_KEY = 'satcode:juror:step';
 
 /**
+ * localStorage key under which the resolved bond VTXO outpoint is cached.
+ * Format: "<txid>:<vout>".  Persisted as soon as resolveBondVtxo() succeeds
+ * so that the outpoint survives page reloads and can be recovered even when
+ * the user imports the same seed after wiping localStorage.
+ */
+export const BOND_VTXO_STORAGE_KEY = 'satcode:juror:bond-vtxo';
+
+/**
  * The mutinynet.arkade.sh server encodes a 4096-second checkpoint exit delay
  * in its checkpointTapscript. The SDK's default floor for non-regtest networks
  * is 86400s (1 day), which would reject the server's tapscript and throw:

@@ -29,6 +29,7 @@ import {
   MUTINYNET_ARK_URL,
   MNEMONIC_STORAGE_KEY,
   STEP_STORAGE_KEY,
+  BOND_VTXO_STORAGE_KEY,
   MIN_JUROR_BOND_SATS,
   MUTINYNET_MIN_CHECKPOINT_EXIT_DELAY_SECONDS
 } from './config';
@@ -145,8 +146,25 @@ function storedStep(): WalletStep | null {
 function clearStoredStep() {
   try {
     localStorage.removeItem(STEP_STORAGE_KEY);
+    localStorage.removeItem(BOND_VTXO_STORAGE_KEY);
   } catch {
     // ignore
+  }
+}
+
+function saveBondVtxoOutpoint(outpoint: string) {
+  try {
+    localStorage.setItem(BOND_VTXO_STORAGE_KEY, outpoint);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+function storedBondVtxoOutpoint(): string | null {
+  try {
+    return localStorage.getItem(BOND_VTXO_STORAGE_KEY);
+  } catch {
+    return null;
   }
 }
 
@@ -168,6 +186,75 @@ async function deriveWalletMeta(wallet: Wallet) {
   const serverXOnly = hex.decode(info.signerPubkey).slice(1);
   const bondAddr = jurorBondArkAddress(pubkeyBytes, serverXOnly);
   return { boardingAddress, pubkeyHex, bondAddr };
+}
+
+/**
+ * Query the Ark indexer for a spendable bond VTXO belonging to the juror's
+ * bond script.  Returns the "<txid>:<vout>" outpoint string on success, or
+ * null when no unspent VTXO is found.
+ *
+ * This is the authoritative lookup used both during the initial bond-send flow
+ * AND on wallet import/restore — it queries the indexer by pkScript rather
+ * than the wallet's own VTXO list, because the bond VTXO belongs to a
+ * different VtxoScript (the bond address) not tracked by the sender's wallet.
+ */
+async function queryBondVtxoOutpoint(
+  wallet: Wallet,
+  jurorPubkeyHex: string
+): Promise<string | null> {
+  const jurorPubkeyBytes = hex.decode(jurorPubkeyHex);
+  const bondPkScriptHex = hex.encode(
+    buildJurorBondScript(jurorPubkeyBytes).pkScript
+  );
+  const { vtxos } = await wallet.indexerProvider.getVtxos({
+    scripts: [bondPkScriptHex],
+    spendableOnly: true
+  });
+  const found = vtxos.find((v) => v.script === bondPkScriptHex);
+  if (!found) return null;
+  return `${found.txid}:${found.vout}`;
+}
+
+/**
+ * Probe the indexer for an existing bond VTXO immediately after the wallet is
+ * built.  Used in two scenarios:
+ *
+ *  A) Page reload with localStorage intact — the step is 'bond-sent'/'ready'
+ *     but bondVtxoOutpoint is missing from memory; restore it from the cache
+ *     or by re-querying the indexer.
+ *
+ *  B) User imports an existing seed after localStorage wipe — detect that a
+ *     bond was already sent with this seed and skip the full deposit flow.
+ *
+ * Side-effects when a VTXO is found:
+ *   • Sets arkWalletState.bondVtxoOutpoint
+ *   • Persists the outpoint to localStorage via saveBondVtxoOutpoint()
+ *   • Advances the step to 'bond-sent' (caller may further advance to 'ready')
+ *
+ * Returns true when a bond VTXO was found, false otherwise.
+ */
+async function probeExistingBondVtxo(
+  wallet: Wallet,
+  jurorPubkeyHex: string
+): Promise<boolean> {
+  // Fast path: use the cached outpoint if available and skip the network call.
+  const cached = storedBondVtxoOutpoint();
+  if (cached) {
+    arkWalletState.bondVtxoOutpoint = cached;
+    return true;
+  }
+
+  try {
+    const outpoint = await queryBondVtxoOutpoint(wallet, jurorPubkeyHex);
+    if (outpoint) {
+      arkWalletState.bondVtxoOutpoint = outpoint;
+      saveBondVtxoOutpoint(outpoint);
+      return true;
+    }
+  } catch {
+    // Indexer unreachable — non-fatal; caller will stay on the current step.
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,13 +311,26 @@ export async function initWallet(): Promise<void> {
         // Case 2 — already past the deposit phase.  Restore the wallet
         // identity locally (no network) so downstream functions like
         // sendBond() that need _wallet will work.  The bond address is
-        // derived on-demand in deriveAndRestoreBondMeta() when sendBond is
-        // actually called; we skip getInfo() here entirely.
+        // derived on-demand in ensureBondAddress() when sendBond is actually
+        // called; we skip getInfo() here to avoid an unnecessary round-trip.
         _wallet = await buildWallet(existing);
         const pubkeyBytes = await _wallet.identity.xOnlyPublicKey();
-        arkWalletState.jurorPubkeyHex = hex.encode(pubkeyBytes);
+        const pubkeyHex = hex.encode(pubkeyBytes);
+        arkWalletState.jurorPubkeyHex = pubkeyHex;
         arkWalletState.step = resumeStep;
-      } else if (resumeStep === 'boarding' || resumeStep === 'boarding-pending') {
+
+        // Restore the bond VTXO outpoint from localStorage or the indexer so
+        // the juror page can display it immediately without the user having to
+        // open the registration modal.
+        if (resumeStep === 'bond-sent' || resumeStep === 'ready') {
+          // probeExistingBondVtxo is fire-and-forget here; failure is
+          // non-fatal — the outpoint can be re-queried when the modal opens.
+          probeExistingBondVtxo(_wallet, pubkeyHex).catch(() => {});
+        }
+      } else if (
+        resumeStep === 'boarding' ||
+        resumeStep === 'boarding-pending'
+      ) {
         // Case 3 — deposit in progress; the boarding address is still shown
         // on screen so we need the full meta including the bond address.
         _wallet = await buildWallet(existing);
@@ -282,8 +382,17 @@ export async function confirmBackup(): Promise<void> {
     arkWalletState.bondAddress = bondAddr;
     // Clear mnemonic from reactive state; it remains in localStorage only.
     arkWalletState.mnemonic = null;
-    arkWalletState.step = 'boarding';
-    saveStep('boarding');
+
+    // If a bond VTXO already exists for this seed (e.g. re-confirming backup
+    // after a partial wipe), skip straight to 'bond-sent' instead of boarding.
+    const hasBond = await probeExistingBondVtxo(_wallet, pubkeyHex);
+    if (hasBond) {
+      arkWalletState.step = 'bond-sent';
+      saveStep('bond-sent');
+    } else {
+      arkWalletState.step = 'boarding';
+      saveStep('boarding');
+    }
   } catch (err) {
     setError(err instanceof Error ? err.message : 'Failed to build wallet');
     return;
@@ -310,7 +419,9 @@ export async function refreshBalance(): Promise<void> {
     if (!_wallet) {
       const phrase = storedMnemonic();
       if (!phrase) {
-        setError('Wallet not initialised. Please close and reopen this dialog.');
+        setError(
+          'Wallet not initialised. Please close and reopen this dialog.'
+        );
         return;
       }
       try {
@@ -453,42 +564,39 @@ export async function sendBond(bondAmountSats: number): Promise<void> {
 /**
  * Retry delays between attempts (milliseconds).
  * Gives the Ark server time to index the freshly-sent VTXO.
- * Total worst-case wait: 1500 + 2000 + 3000 + 4000 = 10 500 ms.
+ *
+ * The Arkade SDK runs a background settle loop that participates in Ark rounds
+ * (~30 s each on mutinynet). If the first round fails (e.g. "not enough intent
+ * confirmations received"), the SDK retries automatically in the next round.
+ * We therefore need to wait long enough to cover at least two full rounds.
+ *
+ * Total worst-case wait: 2000 + 3000 + 5000 + 10000 + 15000 + 20000 = 55 000 ms (~55 s).
  */
-const VTXO_RETRY_DELAYS_MS = [1500, 2000, 3000, 4000];
+const VTXO_RETRY_DELAYS_MS = [2000, 3000, 5000, 10000, 15000, 20000];
 
 /**
- * Try to find the bond VTXO in `getVtxos()`, retrying with increasing delays
- * if the server hasn't indexed it yet.
+ * Try to find the bond VTXO on the Ark indexer, retrying with increasing
+ * delays if the server hasn't indexed it yet.
  *
- * Sets `arkWalletState.bondVtxoOutpoint` on success.
- * Sets `arkWalletState.error` (non-fatal) if all attempts fail.
+ * Queries the indexer by pkScript (not wallet.getVtxos()) because the bond
+ * VTXO belongs to the bond address — a separate VtxoScript from the sender's
+ * wallet — and therefore never appears in the wallet's own VTXO list.
+ *
+ * Sets arkWalletState.bondVtxoOutpoint and persists it to localStorage on
+ * success.  Sets arkWalletState.error (non-fatal) if all attempts fail.
  */
 export async function resolveBondVtxo(): Promise<void> {
   if (!_wallet || !arkWalletState.jurorPubkeyHex) return;
 
-  const jurorPubkeyBytes = hex.decode(arkWalletState.jurorPubkeyHex);
-  const bondPkScriptHex = hex.encode(
-    buildJurorBondScript(jurorPubkeyBytes).pkScript
-  );
+  const pubkeyHex = arkWalletState.jurorPubkeyHex;
 
   const attempt = async (): Promise<boolean> => {
-    const vtxos = await _wallet!.getVtxos();
-    console.debug(
-      '[arkWallet] resolveBondVtxo — expected script:',
-      bondPkScriptHex,
-      '— actual unspent scripts:',
-      vtxos.filter((v) => !v.isSpent).map((v) => v.script)
-    );
-    const bondVtxo = vtxos.find(
-      (v) => !v.isSpent && v.script === bondPkScriptHex
-    );
-    if (bondVtxo) {
-      arkWalletState.bondVtxoOutpoint = `${bondVtxo.txid}:${bondVtxo.vout}`;
+    const outpoint = await queryBondVtxoOutpoint(_wallet!, pubkeyHex);
+    if (outpoint) {
+      arkWalletState.bondVtxoOutpoint = outpoint;
+      saveBondVtxoOutpoint(outpoint);
       // Clear any prior "not indexed" warning.
-      if (
-        arkWalletState.error?.startsWith('Bond VTXO not yet indexed')
-      ) {
+      if (arkWalletState.error?.startsWith('Bond VTXO not yet indexed')) {
         arkWalletState.error = null;
       }
       return true;
@@ -515,8 +623,8 @@ export async function resolveBondVtxo(): Promise<void> {
 
   // All attempts exhausted — surface a soft warning.
   arkWalletState.error =
-    'Bond VTXO not yet indexed by the Ark server. ' +
-    'Your bond is locked — click "Retry VTXO lookup" to try again before publishing.';
+    'Bond VTXO not yet indexed — the Ark server may still be processing your transaction. ' +
+    'Wait ~30 s for the next round and click "Retry VTXO lookup", or it will resolve automatically.';
 }
 
 /** Mark the wallet as fully ready (call after publishing Nostr registration). */
@@ -554,8 +662,18 @@ export async function importWallet(phrase: string): Promise<void> {
     arkWalletState.boardingAddress = boardingAddress;
     arkWalletState.jurorPubkeyHex = pubkeyHex;
     arkWalletState.bondAddress = bondAddr;
-    arkWalletState.step = 'boarding';
-    saveStep('boarding');
+
+    // If the imported seed already has a bond VTXO on the indexer (e.g. the
+    // user is restoring after a localStorage wipe), jump straight to
+    // 'bond-sent' so they can publish their registration without re-depositing.
+    const hasBond = await probeExistingBondVtxo(_wallet, pubkeyHex);
+    if (hasBond) {
+      arkWalletState.step = 'bond-sent';
+      saveStep('bond-sent');
+    } else {
+      arkWalletState.step = 'boarding';
+      saveStep('boarding');
+    }
   } catch (err) {
     setError(err instanceof Error ? err.message : 'Failed to import wallet');
     return;
@@ -564,7 +682,7 @@ export async function importWallet(phrase: string): Promise<void> {
   arkWalletState.loading = false;
 }
 
-/** Reset wallet state without wiping localStorage (useful for testing). */
+/** Reset wallet state and clear all persisted wallet keys from localStorage. */
 export function resetWalletState(): void {
   _wallet = null;
   arkWalletState.step = 'uninitialised';
@@ -576,5 +694,6 @@ export function resetWalletState(): void {
   arkWalletState.bondVtxoOutpoint = null;
   arkWalletState.error = null;
   arkWalletState.loading = false;
+  // clearStoredStep() also removes BOND_VTXO_STORAGE_KEY (see its definition).
   clearStoredStep();
 }
