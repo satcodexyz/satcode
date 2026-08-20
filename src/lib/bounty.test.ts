@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
-import type { BountyDraft, Deletion } from './bounty';
+import type { BountyDraft } from './bounty';
 import type { Bounty } from './types/bounty';
 
 // ---------------------------------------------------------------------------
@@ -339,8 +339,8 @@ describe('upsertBounty', () => {
 });
 
 describe('visibleBounties', () => {
-  function record(...events: NDKEvent[]): Map<string, Deletion> {
-    const deletions = new Map<string, Deletion>();
+  function record(...events: NDKEvent[]): Map<string, number> {
+    const deletions = new Map<string, number>();
     for (const event of events) recordDeletion(event, deletions);
     return deletions;
   }
@@ -397,6 +397,21 @@ describe('visibleBounties', () => {
     );
 
     expect(visibleBounties(index(bounty), deletions)).toEqual([bounty]);
+  });
+
+  it('keeps a maker deletion a later impostor request targets', () => {
+    // Keyed by target alone, the impostor's newer request would evict the
+    // maker's and put the retracted bounty back on the listing.
+    const bounty = parseOrThrow(makeBountyEvent({ createdAt: 100 }));
+    const deletions = record(
+      makeDeletionEvent({ addresses: [bounty.address] }, { createdAt: 200 }),
+      makeDeletionEvent(
+        { addresses: [bounty.address], ids: [bounty.id] },
+        { pubkey: IMPOSTOR, createdAt: 300 }
+      )
+    );
+
+    expect(visibleBounties(index(bounty), deletions)).toEqual([]);
   });
 
   it('ignores an address deletion older than the revision it targets', () => {

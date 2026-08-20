@@ -8,8 +8,7 @@
     parseBountyEvent,
     recordDeletion,
     upsertBounty,
-    visibleBounties,
-    type Deletion
+    visibleBounties
   } from '$lib/bounty';
   import BountyCard from '$lib/components/BountyCard.svelte';
   import Loading from '$lib/components/Loading.svelte';
@@ -20,7 +19,7 @@
   const RELAY_TIMEOUT_MS = 8000;
 
   const byAddress = new SvelteMap<string, Bounty>();
-  const deletions = new SvelteMap<string, Deletion>();
+  const deletions = new SvelteMap<string, number>();
   let loading = $state(true);
 
   const bounties = $derived(visibleBounties(byAddress, deletions));
@@ -32,8 +31,10 @@
     const timeout = setTimeout(() => (loading = false), RELAY_TIMEOUT_MS);
 
     // One subscription, one EOSE. `#s` keeps other apps' kind-30050 events out
-    // of the limit; the deletion filter uses the `k` tag NDKEvent.delete()
-    // writes, so it only matches retracted bounties.
+    // of the limit. `#k` narrows kind 5 to bounty retractions: NIP-09 asks a
+    // deletion request to carry a `k` tag naming the kind it targets. That is a
+    // SHOULD, so a request omitting it is missed — the alternative is every
+    // deletion on the relay.
     const sub = ndk().subscribe(
       [
         { kinds: [BOUNTY_KIND], '#s': [...BOUNTY_STATUSES], limit: 100 },

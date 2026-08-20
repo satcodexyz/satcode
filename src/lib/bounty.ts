@@ -166,23 +166,27 @@ export function upsertBounty(
   }
 }
 
-/** A NIP-09 deletion request, keyed by the event id or address it targets. */
-export interface Deletion {
-  /** `created_at` of the newest deletion request seen for that target. */
-  at: number;
-  /** Pubkey that signed it — only an author may delete their own events. */
-  by: string;
+/**
+ * Key a deletion request by its signer as well as its target.
+ *
+ * NIP-09: a request only deletes events with an identical pubkey, so one
+ * signed by anyone else deletes nothing. Keying by signer keeps a stranger's
+ * later request from evicting the maker's own and putting a retracted bounty
+ * back on the listing.
+ */
+function deletionKey(pubkey: string, target: string): string {
+  return `${pubkey}:${target}`;
 }
 
 /**
  * Record the targets of a kind-5 deletion request, newest wins.
  *
  * `a` and `e` targets share one map: a 64-character event id can never collide
- * with a `<kind>:<pubkey>:<d>` address.
+ * with a `<kind>:<pubkey>:<d>` address. Values are the request's `created_at`.
  */
 export function recordDeletion(
   event: NDKEvent,
-  deletions: Map<string, Deletion>
+  deletions: Map<string, number>
 ): void {
   const { pubkey, created_at: at } = event;
   if (!pubkey || !at) return;
@@ -193,32 +197,29 @@ export function recordDeletion(
   ];
   for (const [, target] of targets) {
     if (!target) continue;
-    const current = deletions.get(target);
-    if (!current || at > current.at) {
-      deletions.set(target, { at, by: pubkey });
+    const key = deletionKey(pubkey, target);
+    const current = deletions.get(key);
+    if (current === undefined || at > current) {
+      deletions.set(key, at);
     }
   }
 }
 
 function isDeleted(
   bounty: Bounty,
-  deletions: ReadonlyMap<string, Deletion>
+  deletions: ReadonlyMap<string, number>
 ): boolean {
-  const byAddress = deletions.get(bounty.address);
+  const { makerPubkey } = bounty;
   // NIP-09: an `a` request deletes every version created before it.
-  if (
-    byAddress?.by === bounty.makerPubkey &&
-    byAddress.at >= bounty.createdAt
-  ) {
-    return true;
-  }
-  return deletions.get(bounty.id)?.by === bounty.makerPubkey;
+  const byAddress = deletions.get(deletionKey(makerPubkey, bounty.address));
+  if (byAddress !== undefined && byAddress >= bounty.createdAt) return true;
+  return deletions.has(deletionKey(makerPubkey, bounty.id));
 }
 
 /** Bounties their maker has not retracted, newest first. */
 export function visibleBounties(
   byAddress: ReadonlyMap<string, Bounty>,
-  deletions: ReadonlyMap<string, Deletion>
+  deletions: ReadonlyMap<string, number>
 ): Bounty[] {
   return [...byAddress.values()]
     .filter((bounty) => !isDeleted(bounty, deletions))
