@@ -4,7 +4,10 @@ export type BountyStatus =
 export type ResolutionMode = 'A' | 'B';
 
 export interface Bounty {
+  /** Event id of the revision this was parsed from; NIP-09 `e` tags match it. */
   id: string;
+  /** `<kind>:<pubkey>:<d>` — stable across revisions, unlike the event id. */
+  address: string;
   title: string;
   description: string;
   amountSats: number;
@@ -13,7 +16,8 @@ export interface Bounty {
   makerPubkey: string;
   createdAt: number; // unix timestamp
   resolutionMode: ResolutionMode;
-  checkInIntervalDays: number;
+  /** Omitted when the event carries no `check_in_days` tag. */
+  checkInIntervalDays?: number;
 }
 
 export interface BountyComment {

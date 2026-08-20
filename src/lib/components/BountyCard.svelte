@@ -34,7 +34,7 @@
 </script>
 
 <a
-  href={`/bounties/${bounty.id}`}
+  href={`/bounties/${encodeURIComponent(bounty.address)}`}
   class="rounded-xl border border-surface-600 bg-surface-800 p-5 transition-colors hover:border-bitcoin-500/60"
 >
   <article>
